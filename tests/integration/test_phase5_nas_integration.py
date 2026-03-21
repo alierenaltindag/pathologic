@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 
 from pathologic.engine import Trainer, TrainerConfig
 from pathologic.models import create_model
-from pathologic.nas import NASearch
+from pathologic.search.nas import NASearch
 
 
 @pytest.mark.integration

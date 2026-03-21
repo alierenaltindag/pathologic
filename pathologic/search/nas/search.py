@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 
 from pathologic.models import create_model
-from pathologic.nas.strategies import NASCandidate, NASStrategy, get_nas_strategy
+from pathologic.search.nas.strategies import NASCandidate, NASStrategy, get_nas_strategy
 from pathologic.utils.logger import get_logger
 from pathologic.utils.progress import is_progress_enabled, step_progress
 
@@ -134,7 +134,7 @@ class NASearch:
         self.patience = patience
         self.min_improvement = min_improvement
         self._rng = np.random.default_rng(random_state)
-        self.logger = get_logger("pathologic.nas.search")
+        self.logger = get_logger("pathologic.search.nas.search")
 
     @classmethod
     def for_model(

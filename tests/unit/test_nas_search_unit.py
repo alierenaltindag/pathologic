@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 
-from pathologic.nas import NASearch
+from pathologic.search.nas import NASearch
 
 
 def test_nas_search_returns_best_candidate() -> None:

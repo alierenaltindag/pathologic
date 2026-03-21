@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from pathologic.nas import (
+from pathologic.search.nas import (
     LowFidelityStrategy,
     WeightSharingStrategy,
     get_nas_strategy,

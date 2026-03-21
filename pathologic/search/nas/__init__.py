@@ -1,7 +1,7 @@
 """Neural architecture search exports."""
 
-from pathologic.nas.search import ModelBoundNASearch, NASearch, NASResult, NASTrialResult
-from pathologic.nas.strategies import (
+from pathologic.search.nas.search import ModelBoundNASearch, NASearch, NASResult, NASTrialResult
+from pathologic.search.nas.strategies import (
     LowFidelityStrategy,
     NASCandidate,
     NASStrategy,

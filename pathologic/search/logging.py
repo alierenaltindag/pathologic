@@ -69,7 +69,7 @@ def inner_search_runtime(
     logger_names = (
         "pathologic.core",
         "pathologic.engine.tuner",
-        "pathologic.nas.search",
+        "pathologic.search.nas.search",
         "optuna",
         "optuna.study",
     )

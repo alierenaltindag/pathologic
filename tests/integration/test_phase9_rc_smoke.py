@@ -24,7 +24,7 @@ def test_phase9_rc_import_surface_is_available() -> None:
         "pathologic.engine.tuner",
         "pathologic.explain.service",
         "pathologic.models.registry",
-        "pathologic.nas.search",
+        "pathologic.search.nas.search",
     ]
     for module_name in modules:
         imported = importlib.import_module(module_name)

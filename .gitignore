@@ -27,4 +27,6 @@ dist/
 .vscode/
 .DS_Store
 
-Roadmap.md
+Roadmap.mdcatboost_info/
+pathologic.egg-info/
+data/

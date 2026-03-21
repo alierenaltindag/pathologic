@@ -12,7 +12,7 @@ from sklearn.metrics import f1_score
 from pathologic import PathoLogic
 from pathologic.data.loader import build_holdout_split
 from pathologic.data.preprocessor import FoldPreprocessor
-from pathologic.nas.search import NASearch
+from pathologic.search.nas.search import NASearch
 from pathologic.search.spec import BudgetProfile, CandidateSpec
 
 

@@ -115,10 +115,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Adapt a CSV schema and train PathoLogic XGBoost model"
     )
-    parser.add_argument("data_csv", help="Input CSV path (e.g. data.csv)")
+    parser.add_argument("data_csv", help="Input CSV path (e.g. data/raw/data.csv)")
     parser.add_argument(
         "--prepared-output",
-        default="results/prepared_data_for_xgboost.csv",
+        default="data/processed/prepared_data_for_xgboost.csv",
         help="Where to write adapted training CSV",
     )
     parser.add_argument(

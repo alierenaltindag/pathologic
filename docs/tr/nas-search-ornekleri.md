@@ -1,13 +1,13 @@
 # NASearch Ornekleri
 
-Bu dokuman, `pathologic.nas.NASearch` sinifini hizli sekilde kullanmak icin ornekler sunar.
+Bu dokuman, `pathologic.search.nas.NASearch` sinifini hizli sekilde kullanmak icin ornekler sunar.
 
 ## 0) Ergonomik API: `NASearch.for_model(...)`
 
 Bu kullanimda `evaluate_candidate` fonksiyonunu manuel yazmaniz gerekmez.
 
 ```python
-from pathologic.nas import NASearch
+from pathologic.search.nas import NASearch
 
 model_search = NASearch.for_model(
     "logreg",
@@ -41,7 +41,7 @@ Not: Low-fidelity stratejisi adaylara varsayilan olarak `epochs` parametresi ekl
 ## 1) En Basit Kullanim (Low-Fidelity)
 
 ```python
-from pathologic.nas import NASearch
+from pathologic.search.nas import NASearch
 
 search = NASearch(
     strategy="low_fidelity",
@@ -76,7 +76,7 @@ print(result.stopped_reason)
 ## 2) Weight-Sharing Stratejisi
 
 ```python
-from pathologic.nas import NASearch
+from pathologic.search.nas import NASearch
 
 search = NASearch(
     strategy="weight_sharing",
@@ -111,7 +111,7 @@ print(result.best_candidate.metadata)
 ## 3) Erken Durdurma (Patience)
 
 ```python
-from pathologic.nas import NASearch
+from pathologic.search.nas import NASearch
 
 search = NASearch(
     strategy="low_fidelity",
@@ -139,7 +139,7 @@ print(len(result.trials))
 ## 4) Sure Butcesi ve Trial Butcesi
 
 ```python
-from pathologic.nas import NASearch
+from pathologic.search.nas import NASearch
 
 search = NASearch(
     strategy="low_fidelity",
@@ -168,7 +168,7 @@ Asagidaki ornek, NAS sonucu ile en iyi parametreleri alip model olusturmayi gost
 
 ```python
 from pathologic.models import create_model
-from pathologic.nas import NASearch
+from pathologic.search.nas import NASearch
 
 search = NASearch(strategy="low_fidelity", random_state=42, max_evaluations=8)
 

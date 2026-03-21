@@ -45,20 +45,6 @@ def test_build_candidate_specs_includes_all_singles_and_pairs() -> None:
     ]
 
 
-def test_build_candidate_specs_supports_triple_hybrid_combinations() -> None:
-    candidates = _build_candidate_specs(
-        include_models=["logreg", "random_forest", "xgboost"],
-        exclude_models=None,
-        include_hybrids=True,
-        max_hybrid_combination_size=3,
-        max_candidates=None,
-    )
-
-    hybrid_names = [item.name for item in candidates if item.kind == "hybrid_pair"]
-
-    assert "logreg+random_forest+xgboost" in hybrid_names
-
-
 def test_build_pair_tuning_search_space_uses_member_namespace_prefix() -> None:
     search_space = _build_pair_tuning_search_space("logreg", "xgboost")
 
@@ -223,21 +209,55 @@ def test_prepare_dataset_retains_error_analysis_columns_without_feature_encoding
 
 def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     parser = build_arg_parser()
-    args = parser.parse_args(["data.csv"])
+    args = parser.parse_args(["data/raw/data.csv"])
 
     assert args.verbose_inner_search is False
-    assert args.model_pool == "xgboost,catboost,lightgbm"
+    assert args.model_pool == "xgboost,tabnet"
     assert args.error_analysis_mode == "hybrid"
     assert args.disable_error_analysis is False
     assert args.hybrid_strategy == "soft_voting"
     assert args.hybrid_weighting_policy == "auto"
     assert args.hybrid_tune_strategy_and_params is True
-    assert args.max_hybrid_combination_size == 2
+    assert args.regularization_profile == "auto"
+    assert args.optimize_regularization_in_nas is False
+
+
+def test_build_candidate_specs_regularization_profile_off_removes_reg_keys() -> None:
+    candidates = _build_candidate_specs(
+        include_models=["xgboost", "lightgbm"],
+        exclude_models=None,
+        include_hybrids=True,
+        max_candidates=None,
+        regularization_profile="off",
+    )
+
+    pair = [item for item in candidates if item.kind == "hybrid_pair"][0]
+    assert "member__xgboost__reg_alpha" not in pair.tuning_search_space
+    assert "member__xgboost__reg_lambda" not in pair.tuning_search_space
+    assert "member__lightgbm__reg_alpha" not in pair.tuning_search_space
+    assert "member__lightgbm__reg_lambda" not in pair.tuning_search_space
+
+
+def test_build_candidate_specs_regularization_scope_applies_to_selected_models() -> None:
+    candidates = _build_candidate_specs(
+        include_models=["xgboost", "lightgbm"],
+        exclude_models=None,
+        include_hybrids=True,
+        max_candidates=None,
+        regularization_profile="auto",
+        regularization_models=["xgboost"],
+    )
+
+    pair = [item for item in candidates if item.kind == "hybrid_pair"][0]
+    assert "member__xgboost__reg_alpha" in pair.tuning_search_space
+    assert "member__xgboost__reg_lambda" in pair.tuning_search_space
+    assert "member__lightgbm__reg_alpha" not in pair.tuning_search_space
+    assert "member__lightgbm__reg_lambda" not in pair.tuning_search_space
 
 
 def test_arg_parser_allows_verbose_inner_search_flag() -> None:
     parser = build_arg_parser()
-    args = parser.parse_args(["data.csv", "--verbose-inner-search"])
+    args = parser.parse_args(["data/raw/data.csv", "--verbose-inner-search"])
 
     assert args.verbose_inner_search is True
 
@@ -257,7 +277,7 @@ def test_resolve_hybrid_strategy_config_includes_manual_weights() -> None:
     parser = build_arg_parser()
     args = parser.parse_args(
         [
-            "data.csv",
+            "data/raw/data.csv",
             "--hybrid-strategy",
             "soft_voting",
             "--hybrid-weights",
@@ -285,7 +305,7 @@ def test_resolve_hybrid_config_for_report_applies_selected_params_overrides() ->
         max_candidates=None,
     )[-1]
     parser = build_arg_parser()
-    args = parser.parse_args(["data.csv", "--hybrid-strategy", "soft_voting"])
+    args = parser.parse_args(["data/raw/data.csv", "--hybrid-strategy", "soft_voting"])
 
     resolved = _resolve_hybrid_config_for_report(
         candidate=candidate,

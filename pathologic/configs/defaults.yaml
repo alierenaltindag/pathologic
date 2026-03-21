@@ -133,7 +133,7 @@ data:
   feature_routing:
     single: {}
     hybrid: {}
-  # data.csv tabanli ornekler (bilgilendirme amacli, runtime'da okunmaz).
+  # data/raw/data.csv tabanli ornekler (bilgilendirme amacli, runtime'da okunmaz).
   # Not: Search script prepared dataset urettiginde feature adlari `feature__`
   # prefix'i alir. Ornekler bu formatla yazilmistir.
   feature_routing_examples:

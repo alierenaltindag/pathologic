@@ -31,7 +31,7 @@ echo "=========================================================="
 # Output is dynamically saved into a folder named after the budget profile.
 echo "[1/4] Starting $BUDGET model search..."
 echo "This may take a while depending on your hardware."
-uv run python scripts/search_best_model.py results/variants_for_examples.csv \
+uv run python scripts/search_best_model.py data/processed/variants_for_examples.csv \
     --budget-profile "$BUDGET" \
     --models "$MODELS" \
     --output-dir "results/${BUDGET}_pipeline"

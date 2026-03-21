@@ -11,7 +11,7 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
     cmd = [
         sys.executable,
         "scripts/search_best_model.py",
-        "data.csv",
+        "data/raw/data.csv",
         "--output-dir",
         str(output_dir),
         "--budget-profile",
@@ -149,3 +149,55 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
     for key in ("train_test_shared_genes", "train_val_shared_genes", "val_test_shared_genes"):
         if key in summary:
             assert int(summary[key]) == 0
+
+
+def test_search_best_model_hybrid_hpo_includes_member_regularization_params(tmp_path: Path) -> None:
+    output_dir = tmp_path / "model_search_reg_out"
+    cmd = [
+        sys.executable,
+        "scripts/search_best_model.py",
+        "data/raw/data.csv",
+        "--output-dir",
+        str(output_dir),
+        "--budget-profile",
+        "quick",
+        "--tune-engine",
+        "random",
+        "--model-pool",
+        "xgboost,catboost",
+        "--max-candidates",
+        "3",
+        "--n-trials",
+        "1",
+        "--nas-candidates",
+        "1",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr + "\n" + result.stdout
+
+    run_dirs = sorted(output_dir.glob("search_*"))
+    assert run_dirs, "Expected at least one run directory"
+    run_dir = run_dirs[-1]
+
+    leaderboard_path = run_dir / "leaderboard.json"
+    leaderboard = json.loads(leaderboard_path.read_text(encoding="utf-8"))
+    rows = leaderboard.get("rows", [])
+    assert isinstance(rows, list) and rows
+
+    hybrid_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and row.get("kind") == "hybrid_pair"
+        and set(str(row.get("candidate", "")).split("+")) == {"catboost", "xgboost"}
+    ]
+    assert hybrid_rows, "Expected catboost+xgboost hybrid row"
+
+    row = hybrid_rows[0]
+    hpo = row.get("hpo")
+    assert isinstance(hpo, dict)
+    best_params = hpo.get("best_params")
+    assert isinstance(best_params, dict)
+    assert "member__xgboost__reg_alpha" in best_params
+    assert "member__xgboost__reg_lambda" in best_params
+    assert "member__catboost__l2_leaf_reg" in best_params
