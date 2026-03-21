@@ -1,3 +1,18 @@
+"""
+Temporary utility script created for one-off workspace restructuring.
+
+PURPOSE:
+This script was used to perform bulk find-and-replace updates across the codebase
+when transitioning to a new project structure (e.g., standardizing data/raw, data/processed 
+directories, and consolidating NAS packages under a unified search module).
+
+ANALYTICAL RELEVANCE:
+This file has NO relevance to the analytical processes, models, or data pipelines.
+It was generated purely as an administrative tool for refactoring static string paths
+and module imports. It can be safely ignored or deleted from the project without 
+affecting any of the core functionalities or experiments.
+"""
+
 import os
 import re
 
