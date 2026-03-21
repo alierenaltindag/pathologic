@@ -77,6 +77,7 @@ search:
         low: 0.15
         high: 0.25
     balanced:
+      max_hybrid_combination_size: 3
       strategy: [soft_voting, hard_voting, stacking, blending]
       weighting_policy:
         [auto, manual, equal, inverse_error, objective_proportional]
