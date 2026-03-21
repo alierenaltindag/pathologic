@@ -177,9 +177,7 @@ finetune: runtime/finetune.yaml
 
 # Model bazlı parametreleri alias anahtarları altında toplar.
 models:
-  # MLP model varsayılanları doğrudan mimari dosyasından yüklenir.
-  mlp: mlp_architecture.yaml
-  # Model başına ayrı defaults dosyaları.
+  mlp: models/mlp.yaml
   xgboost: models/xgboost.yaml
   lightgbm: models/lightgbm.yaml
   catboost: models/catboost.yaml

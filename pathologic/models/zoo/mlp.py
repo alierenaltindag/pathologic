@@ -27,7 +27,7 @@ def _resolve_architecture_path(architecture_path: str) -> Path:
         return raw
 
     package_root = Path(__file__).resolve().parents[2]
-    config_candidate = package_root / "configs" / architecture_path
+    config_candidate = package_root / "configs" / "models" / "mlp.yaml"
     if config_candidate.exists():
         return config_candidate
 
