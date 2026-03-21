@@ -3,7 +3,6 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/package%20manager-uv-magenta)](https://github.com/astral-sh/uv)
 [![Quarto](https://img.shields.io/badge/Reporting-Quarto-blueviolet)](https://quarto.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **PathoLogic** is an automated, high-performance Machine Learning framework designed for predicting genomic variant pathogenicity. It integrates diverse model architectures, automated Neural Architecture Search (NAS) / Hyperparameter Optimization (HPO), and dynamic performance reporting.
 
