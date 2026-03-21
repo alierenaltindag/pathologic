@@ -54,9 +54,9 @@ Raporun ait olduğu analitik sürecin donanım ve zaman bilgileri:
 #| echo: false
 #| results: asis
 display(Markdown(f"""
-- **Profil (Bütçe):** `{run_profile}`
-- **Çalıştırılan Makine:** `{run_machine}`
-- **Çalıştırılma Zamanı:** `{run_time}`
+- **Profil (Bütçe):** {run_profile}
+- **Çalıştırılan Makine:** {run_machine}
+- **Çalıştırılma Zamanı:** {run_time}
 """))
 ```
 
