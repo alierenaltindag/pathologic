@@ -87,8 +87,12 @@ class TabNetWrapper:
 
             self._is_native_tabnet = True
             resolved_device_name = device_name
-            if resolved_device_name is None and detect_preferred_device() == "cuda":
-                resolved_device_name = "cuda"
+            # MAC_OPTIMIZATION: Allow TabNet to utilize MPS on Apple Silicon devices 
+            # instead of falling back to CPU when CUDA is missing.
+            if resolved_device_name is None:
+                detected_dev = detect_preferred_device()
+                if detected_dev in ("cuda", "mps"):
+                    resolved_device_name = detected_dev
 
             optimizer_fn, optimizer_params = self._resolve_native_optimizer()
             scheduler_fn, scheduler_params = self._resolve_native_scheduler()
@@ -135,6 +139,11 @@ class TabNetWrapper:
 
     def fit(self, x: np.ndarray, y: np.ndarray) -> TabNetWrapper:
         if self._is_native_tabnet:
+            # MAC_OPTIMIZATION: Ensure float32 before passing to tabnet.
+            # TabNet does `data.to(device).float()`, which crashes on 'mps'
+            # if the numpy array implicitly creates a float64 tensor.
+            x = np.asarray(x, dtype=np.float32)
+
             patience = int(self._early_stopping_cfg.get("patience", self._patience))
             early_enabled = bool(self._early_stopping_cfg.get("enabled", True))
             validation_split = float(self._early_stopping_cfg.get("validation_split", 0.2))
@@ -257,10 +266,14 @@ class TabNetWrapper:
         return scheduler_fn, params
 
     def predict(self, x: np.ndarray) -> np.ndarray:
+        if self._is_native_tabnet:
+            x = np.asarray(x, dtype=np.float32)
         predictions = self.estimator.predict(x)
         return np.asarray(predictions).reshape(-1)
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
+        if self._is_native_tabnet:
+            x = np.asarray(x, dtype=np.float32)
         if hasattr(self.estimator, "predict_proba"):
             return np.asarray(self.estimator.predict_proba(x))
 

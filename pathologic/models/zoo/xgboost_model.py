@@ -72,6 +72,9 @@ class XGBoostWrapper:
                 common_params["scale_pos_weight"] = 1.0
 
             preferred_device = device
+            # MAC_OPTIMIZATION: XGBoost natively targets Apple Silicon CPU very efficiently.
+            # We explicitly only target GPU parameters if CUDA is present, avoiding 
+            # unsupported native M1/M2/M3 device injections.
             if preferred_device is None and detect_preferred_device() == "cuda":
                 preferred_device = "cuda"
 

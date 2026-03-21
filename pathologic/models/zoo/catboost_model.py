@@ -74,6 +74,8 @@ class CatBoostWrapper:
                 common_params["auto_class_weights"] = "Balanced"
 
             resolved_task_type = task_type
+            # MAC_OPTIMIZATION: Explicitly avoid passing task_type="GPU" on Apple Silicon.
+            # CatBoost GPU implementation is strictly CUDA-based and will crash on 'mps'.
             if resolved_task_type is None and detect_preferred_device() == "cuda":
                 resolved_task_type = "GPU"
 

@@ -78,6 +78,10 @@ class LightGBMWrapper:
             preferred_device = device
             if preferred_device is None:
                 detected = detect_preferred_device()
+                # MAC_OPTIMIZATION: We strictly map only 'cuda' to 'gpu' for LightGBM.
+                # Apple Silicon (mps) lacks stable native tree-building OpenCL/GPU support 
+                # in default LightGBM builds; leaving parameter unassigned falls back
+                # to highly optimized Metal/Accelerate CPU pathways automatically.
                 if detected == "cuda":
                     preferred_device = "cuda"
             
