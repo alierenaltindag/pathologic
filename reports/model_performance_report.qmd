@@ -24,14 +24,17 @@ Bu rapor, farklı makine öğrenmesi modelleri ve hiperparametre optimizasyonu (
 
 ```{python}
 #| label: setup
+#| tags: [parameters]
 #| include: false
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from IPython.display import Markdown, display
 
+# Varsayılan değer (Quarto papermill ile bunu ezecek)
+csv_path = "../results/model_search/search_20260321_160620/leaderboard_summary.csv"
+
 # Veriyi Yükle
-csv_path = params.get("csv_path", "")
 df = pd.read_csv(csv_path)
 
 # Sütun isimlerini daha okunabilir hale getirmek için düzenliyoruz

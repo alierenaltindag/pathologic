@@ -141,7 +141,7 @@ class Tuner:
         with step_progress(total=n_trials, desc="tune optuna", enabled=show_progress) as bar:
             def wrapped_optuna_objective(trial: Any) -> float:
                 score = optuna_objective(trial)
-                ppbar.update(1)
+                bar.update(1)
                 bar.set_postfix(best=f"{best_score:.4f}")
                 return score
 

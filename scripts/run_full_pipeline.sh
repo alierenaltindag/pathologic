@@ -64,18 +64,20 @@ echo "[4/4] Generating Quarto HTML Report..."
 # Therefore, we must convert the absolute/cwd-based path to a relative path for the renderer.
 RELATIVE_CSV_PATH="../$CSV_PATH"
 
-# First, check if Quarto exists inside the RStudio or Positron installation paths as a fallback on macOS.
-QUARTO_BIN="/Applications/RStudio.app/Contents/Resources/app/quarto/bin/quarto"
-if [ ! -f "$QUARTO_BIN" ]; then
+# First, try system quarto if available
+if command -v quarto &> /dev/null; then
+    QUARTO_BIN="quarto"
+elif [ -f "/Applications/RStudio.app/Contents/Resources/app/quarto/bin/quarto" ]; then
+    QUARTO_BIN="/Applications/RStudio.app/Contents/Resources/app/quarto/bin/quarto"
+elif [ -f "/Applications/Positron.app/Contents/Resources/app/quarto/bin/quarto" ]; then
     QUARTO_BIN="/Applications/Positron.app/Contents/Resources/app/quarto/bin/quarto"
+else
+    QUARTO_BIN="quarto"
 fi
 
-# Execute Quarto with the found binary, otherwise attempt to use the system's global `quarto` command.
-if [ -f "$QUARTO_BIN" ]; then
-    "$QUARTO_BIN" render reports/model_performance_report.qmd -P csv_path:"$RELATIVE_CSV_PATH"
-else
-    quarto render reports/model_performance_report.qmd -P csv_path:"$RELATIVE_CSV_PATH"
-fi
+# Execute Quarto with the found binary
+export QUARTO_PYTHON=$(which python)
+$QUARTO_BIN render reports/model_performance_report.qmd -P csv_path:"$RELATIVE_CSV_PATH"
 
 echo ""
 echo "=========================================================="
