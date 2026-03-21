@@ -41,12 +41,12 @@ def main():
         }
 
         # HPO / NAS best score
-        phase = row.get("kind", "")
-        if phase == "hpo" and "hpo" in row:
+        kind = row.get("kind", "")
+        if "hpo" in row and row["hpo"].get("best_score") is not None:
             flat_row["validation_score"] = row["hpo"].get("best_score", "")
-        elif phase == "nas" and "nas" in row:
+        elif "nas" in row and row["nas"].get("best_score") is not None:
             flat_row["validation_score"] = row["nas"].get("best_score", "")
-        elif phase == "ensemble" and "ensemble" in row:
+        elif "ensemble" in row and row["ensemble"].get("validation_score") is not None:
             flat_row["validation_score"] = row["ensemble"].get("validation_score", "")
         else:
             flat_row["validation_score"] = ""
