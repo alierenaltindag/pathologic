@@ -12,11 +12,11 @@ Varsayilan config referansi: [pathologic/configs/defaults.yaml](pathologic/confi
 ## Minimal Ornek
 
 ```csv
-variant_id,gene_id,label,feat_a,feat_b
-v1,G1,1,0.1,1.0
-v2,G1,0,0.2,1.1
-v3,G2,1,0.3,0.9
-v4,G2,0,0.4,1.2
+variant_id,gene_id,label,REVEL_Score,cadd.phred
+v1,G1,1,0.91,28.4
+v2,G1,0,0.07,7.2
+v3,G2,1,0.84,24.8
+v4,G2,0,0.15,10.1
 ```
 
 ## Opsiyonel Sutunlar
@@ -50,6 +50,6 @@ data:
   label_column: label
   gene_column: gene_id
   required_features:
-    - feat_a
-    - feat_b
+    - revel_score
+    - cadd_phred
 ```

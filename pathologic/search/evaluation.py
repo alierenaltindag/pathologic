@@ -65,53 +65,6 @@ def evaluate_candidate(
         model.defaults.setdefault("data", {})["label_column"] = "label"
         model.defaults.setdefault("data", {})["gene_column"] = "gene_id"
 
-        hpo_result: dict[str, Any]
-        try:
-            hpo_total_trials = (
-                int(args.n_trials) if args.n_trials is not None else int(budget.n_trials)
-            )
-            hpo_trial_state = {"done": 0}
-
-            def _on_hpo_trial_complete(
-                _trial: dict[str, Any],
-                _state: dict[str, int] = hpo_trial_state,
-                _total_trials: int = hpo_total_trials,
-            ) -> None:
-                _state["done"] += 1
-                trial_score = _trial.get("score")
-                score_text = (
-                    f" score={float(trial_score):.4f}"
-                    if isinstance(trial_score, (int, float))
-                    else ""
-                )
-                stage_update(
-                    "hpo",
-                    state="progress",
-                    detail=f"{_state['done']}/{_total_trials} trials{score_text}",
-                )
-
-            stage_update("hpo", state="start")
-            with inner_search_runtime(
-                quiet=quiet_inner_search,
-                show_inner_progress=True,
-                suppress_stdout=True,
-                suppress_stderr=False,
-            ):
-                hpo_result = _search_hpo_nas.run_hpo(
-                    model=model,
-                    train_csv=str(outer_train_csv),
-                    objective=args.objective,
-                    tune_engine=args.tune_engine,
-                    budget=budget,
-                    cv_splits=cv_splits,
-                    n_trials_override=args.n_trials,
-                    on_trial_complete=_on_hpo_trial_complete,
-                )
-            stage_update("hpo", state="done", detail=str(hpo_result.get("status", "ok")))
-        except Exception as exc:
-            hpo_result = {"status": "failed", "reason": str(exc)}
-            stage_update("hpo", state="failed", detail=str(exc))
-
         search_space = candidate.tuning_search_space
         if not search_space:
             cfg_space = model._resolve_model_config().get("tuning_search_space")  # noqa: SLF001
@@ -122,86 +75,251 @@ def evaluate_candidate(
                     if isinstance(v, dict)
                 }
 
-        nas_result: dict[str, Any]
-        try:
-            regularization_models = parse_model_pool(
-                getattr(args, "regularization_models", None)
-            )
-            optimize_regularization_in_nas = bool(
-                getattr(args, "optimize_regularization_in_nas", False)
-            )
-            nas_search_space = (
+        run_nas_for_candidate = _search_hpo_nas.should_run_nas_for_candidate(candidate)
+        level1_space: dict[str, dict[str, Any]] = {}
+        level2_space: dict[str, dict[str, Any]] = {}
+        if candidate.kind == "hybrid_pair" and search_space:
+            level1_space, level2_space = _search_hpo_nas.split_hybrid_hpo_search_space(
                 search_space
-                if optimize_regularization_in_nas
-                else _search_candidate.strip_regularization_search_space(
-                    search_space=search_space,
-                    members=tuple(candidate.members),
-                    regularization_models=regularization_models,
-                )
             )
 
-            nas_total_candidates = (
-                int(args.nas_candidates)
-                if args.nas_candidates is not None
-                else int(budget.nas_candidates)
-            )
-            nas_candidate_state = {"done": 0}
-
-            def _on_nas_candidate_complete(
-                _trial: dict[str, Any],
-                _state: dict[str, int] = nas_candidate_state,
-                _total_candidates: int = nas_total_candidates,
-            ) -> None:
-                _state["done"] += 1
-                trial_score = _trial.get("score")
-                score_text = (
-                    f" score={float(trial_score):.4f}"
-                    if isinstance(trial_score, (int, float))
-                    else ""
+        def _run_hpo_stage(
+            *,
+            stage_name: str,
+            search_space_override: dict[str, dict[str, Any]] | None = None,
+            base_model_params_override: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            try:
+                hpo_total_trials = (
+                    int(args.n_trials) if args.n_trials is not None else int(budget.n_trials)
                 )
+                hpo_trial_state = {"done": 0}
+
+                def _on_hpo_trial_complete(
+                    _trial: dict[str, Any],
+                    _state: dict[str, int] = hpo_trial_state,
+                    _total_trials: int = hpo_total_trials,
+                ) -> None:
+                    _state["done"] += 1
+                    trial_score = _trial.get("score")
+                    score_text = (
+                        f" score={float(trial_score):.4f}"
+                        if isinstance(trial_score, (int, float))
+                        else ""
+                    )
+                    stage_update(
+                        stage_name,
+                        state="progress",
+                        detail=f"{_state['done']}/{_total_trials} trials{score_text}",
+                    )
+
+                stage_update(stage_name, state="start")
+                with inner_search_runtime(
+                    quiet=quiet_inner_search,
+                    show_inner_progress=True,
+                    suppress_stdout=True,
+                    suppress_stderr=False,
+                ):
+                    hpo_result_local = _search_hpo_nas.run_hpo(
+                        model=model,
+                        train_csv=str(outer_train_csv),
+                        objective=args.objective,
+                        tune_engine=args.tune_engine,
+                        budget=budget,
+                        cv_splits=cv_splits,
+                        n_trials_override=args.n_trials,
+                        on_trial_complete=_on_hpo_trial_complete,
+                        search_space_override=search_space_override,
+                        base_model_params_override=base_model_params_override,
+                    )
+                if "status" not in hpo_result_local:
+                    hpo_result_local["status"] = "ok"
                 stage_update(
-                    "nas",
-                    state="progress",
-                    detail=(
-                        f"{_state['done']}/{_total_candidates} candidates"
-                        f"{score_text}"
-                    ),
+                    stage_name,
+                    state="done",
+                    detail=str(hpo_result_local.get("status", "ok")),
                 )
+                return hpo_result_local
+            except Exception as exc:
+                stage_update(stage_name, state="failed", detail=str(exc))
+                return {"status": "failed", "reason": str(exc)}
 
-            stage_update("nas", state="start")
-            with inner_search_runtime(
-                quiet=quiet_inner_search,
-                show_inner_progress=True,
-                suppress_stdout=True,
-                suppress_stderr=False,
-            ):
-                nas_result = _search_hpo_nas.run_nas(
-                    candidate=candidate,
-                    seed=int(args.seed),
-                    nas_strategy=args.nas_strategy,
-                    budget=budget,
-                    nas_candidates_override=args.nas_candidates,
-                    search_space=nas_search_space,
-                    base_model_params=(
-                        dict(hpo_result.get("best_params", {}))
-                        if isinstance(hpo_result.get("best_params"), dict)
-                        else {}
-                    ),
-                    x_train=x_train_nas,
-                    y_train=y_train_nas,
-                    x_val=x_val_nas,
-                    y_val=y_val_nas,
-                    on_candidate_complete=_on_nas_candidate_complete,
+        def _run_nas_stage(*, base_model_params: dict[str, Any]) -> dict[str, Any]:
+            if not run_nas_for_candidate:
+                stage_update("nas", state="start")
+                skipped = _search_hpo_nas.skipped_nas_result(reason="model_family_policy")
+                stage_update("nas", state="done", detail=str(skipped.get("status", "skipped")))
+                return skipped
+
+            try:
+                regularization_models = parse_model_pool(
+                    getattr(args, "regularization_models", None)
                 )
-            stage_update("nas", state="done", detail=str(nas_result.get("status", "ok")))
-        except Exception as exc:
-            nas_result = {"status": "failed", "reason": str(exc)}
-            stage_update("nas", state="failed", detail=str(exc))
+                optimize_regularization_in_nas = bool(
+                    getattr(args, "optimize_regularization_in_nas", False)
+                )
+                if candidate.kind == "hybrid_pair":
+                    nas_search_space = _search_hpo_nas.build_hybrid_neural_nas_search_space(
+                        candidate=candidate,
+                        search_space=search_space,
+                    )
+                    if not nas_search_space:
+                        stage_update("nas", state="start")
+                        skipped = _search_hpo_nas.skipped_nas_result(
+                            reason="model_family_policy_non_neural_hybrid"
+                        )
+                        stage_update(
+                            "nas",
+                            state="done",
+                            detail=str(skipped.get("status", "skipped")),
+                        )
+                        return skipped
 
-        selected_params, selected_source = _search_hpo_nas.select_best_params(
-            hpo_result,
-            nas_result,
-        )
+                    if not optimize_regularization_in_nas:
+                        nas_search_space = _search_candidate.strip_regularization_search_space(
+                            search_space=nas_search_space,
+                            members=_search_hpo_nas.hybrid_neural_member_aliases(candidate),
+                            regularization_models=regularization_models,
+                        )
+                else:
+                    nas_search_space = (
+                        search_space
+                        if optimize_regularization_in_nas
+                        else _search_candidate.strip_regularization_search_space(
+                            search_space=search_space,
+                            members=tuple(candidate.members),
+                            regularization_models=regularization_models,
+                        )
+                    )
+
+                nas_total_candidates = (
+                    int(args.nas_candidates)
+                    if args.nas_candidates is not None
+                    else int(budget.nas_candidates)
+                )
+                nas_candidate_state = {"done": 0}
+
+                def _on_nas_candidate_complete(
+                    _trial: dict[str, Any],
+                    _state: dict[str, int] = nas_candidate_state,
+                    _total_candidates: int = nas_total_candidates,
+                ) -> None:
+                    _state["done"] += 1
+                    trial_score = _trial.get("score")
+                    score_text = (
+                        f" score={float(trial_score):.4f}"
+                        if isinstance(trial_score, (int, float))
+                        else ""
+                    )
+                    stage_update(
+                        "nas",
+                        state="progress",
+                        detail=(
+                            f"{_state['done']}/{_total_candidates} candidates"
+                            f"{score_text}"
+                        ),
+                    )
+
+                stage_update("nas", state="start")
+                with inner_search_runtime(
+                    quiet=quiet_inner_search,
+                    show_inner_progress=True,
+                    suppress_stdout=True,
+                    suppress_stderr=False,
+                ):
+                    nas_result_local = _search_hpo_nas.run_nas(
+                        candidate=candidate,
+                        seed=int(args.seed),
+                        nas_strategy=args.nas_strategy,
+                        budget=budget,
+                        nas_candidates_override=args.nas_candidates,
+                        search_space=nas_search_space,
+                        base_model_params=base_model_params,
+                        x_train=x_train_nas,
+                        y_train=y_train_nas,
+                        x_val=x_val_nas,
+                        y_val=y_val_nas,
+                        on_candidate_complete=_on_nas_candidate_complete,
+                    )
+                stage_update("nas", state="done", detail=str(nas_result_local.get("status", "ok")))
+                return nas_result_local
+            except Exception as exc:
+                stage_update("nas", state="failed", detail=str(exc))
+                return {"status": "failed", "reason": str(exc)}
+
+        hpo_level1_result: dict[str, Any] | None = None
+        hpo_level2_result: dict[str, Any] | None = None
+
+        if candidate.kind == "hybrid_pair":
+            nas_result = _run_nas_stage(base_model_params={})
+            nas_best_params = (
+                dict(nas_result["best_params"])
+                if isinstance(nas_result.get("best_params"), dict)
+                else {}
+            )
+            hpo_level1_result = _run_hpo_stage(
+                stage_name="hpo_level1",
+                search_space_override=level1_space,
+                base_model_params_override=nas_best_params,
+            )
+            level1_best_params = (
+                dict(hpo_level1_result["best_params"])
+                if isinstance(hpo_level1_result.get("best_params"), dict)
+                else {}
+            )
+            hpo_level2_result = _run_hpo_stage(
+                stage_name="hpo_level2",
+                search_space_override=level2_space,
+                base_model_params_override=level1_best_params,
+            )
+            hpo_result = _search_hpo_nas.merge_hpo_level_results(
+                level1_result=hpo_level1_result,
+                level2_result=hpo_level2_result,
+            )
+        elif run_nas_for_candidate:
+            nas_result = _run_nas_stage(base_model_params={})
+            hpo_result = _run_hpo_stage(stage_name="hpo")
+        else:
+            hpo_result = _run_hpo_stage(stage_name="hpo")
+            nas_result = _run_nas_stage(base_model_params={})
+
+        if run_nas_for_candidate:
+            if isinstance(hpo_result.get("best_params"), dict):
+                selected_params = dict(hpo_result["best_params"])
+                selected_source = "hpo_after_nas"
+            elif isinstance(nas_result.get("best_params"), dict):
+                selected_params = dict(nas_result["best_params"])
+                selected_source = "nas"
+            else:
+                selected_params = {}
+                selected_source = "defaults"
+        else:
+            if candidate.kind == "hybrid_pair":
+                if isinstance(hpo_result.get("best_params"), dict):
+                    selected_params = dict(hpo_result["best_params"])
+                    hpo_selected_source = str(
+                        hpo_result.get("selected_params_source", "hpo_level1")
+                    )
+                    if isinstance(nas_result.get("best_params"), dict):
+                        if hpo_selected_source == "hpo_level2_after_level1":
+                            selected_source = "hpo_level2_after_level1_after_nas"
+                        elif hpo_selected_source == "hpo_level1":
+                            selected_source = "hpo_level1_after_nas"
+                        else:
+                            selected_source = hpo_selected_source
+                    else:
+                        selected_source = hpo_selected_source
+                elif isinstance(nas_result.get("best_params"), dict):
+                    selected_params = dict(nas_result["best_params"])
+                    selected_source = "nas_hybrid_member_only"
+                else:
+                    selected_params = {}
+                    selected_source = "defaults"
+            else:
+                selected_params, selected_source = _search_hpo_nas.select_best_params(
+                    hpo_result,
+                    nas_result,
+                )
 
         train_kwargs: dict[str, Any] = {}
         if selected_params:
@@ -311,6 +429,10 @@ def evaluate_candidate(
             }
 
         row["hpo"] = hpo_result
+        if hpo_level1_result is not None:
+            row["hpo_level1"] = hpo_level1_result
+        if hpo_level2_result is not None:
+            row["hpo_level2"] = hpo_level2_result
         row["nas"] = nas_result
         row["selected_params_source"] = selected_source
         row["selected_params"] = selected_params

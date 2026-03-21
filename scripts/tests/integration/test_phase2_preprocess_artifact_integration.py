@@ -20,7 +20,7 @@ def test_train_val_preprocess_artifact_consistency(tmp_path: Path, variant_csv_p
     val_df = df.iloc[val_idx].reset_index(drop=True)
 
     processor = FoldPreprocessor(
-        numeric_features=["feat_a", "feat_b"],
+        numeric_features=["revel_score", "cadd_phred"],
         gene_column="gene_id",
         impute_strategy="median",
         scaler="standard",
@@ -36,16 +36,16 @@ def test_train_val_preprocess_artifact_consistency(tmp_path: Path, variant_csv_p
     first = processor.transform(val_df)
     second = loaded.transform(val_df)
 
-    assert first[["feat_a", "feat_b"]].equals(second[["feat_a", "feat_b"]])
+    assert first[["revel_score", "cadd_phred"]].equals(second[["revel_score", "cadd_phred"]])
 
 
 @pytest.mark.integration
 def test_transform_rejects_missing_feature_columns(variant_csv_path: str) -> None:
     df = load_dataset(variant_csv_path)
-    processor = FoldPreprocessor(numeric_features=["feat_a", "feat_b"], per_gene=False)
+    processor = FoldPreprocessor(numeric_features=["revel_score", "cadd_phred"], per_gene=False)
     processor.fit(df)
 
-    broken = df.drop(columns=["feat_b"])
+    broken = df.drop(columns=["cadd_phred"])
     with pytest.raises(ValueError, match="Missing numeric feature columns"):
         processor.transform(broken)
 
@@ -60,7 +60,7 @@ def test_missing_indicator_columns_survive_artifact_roundtrip(
     val_df = df.iloc[8:].reset_index(drop=True)
 
     processor = FoldPreprocessor(
-        numeric_features=["feat_a", "feat_b"],
+        numeric_features=["revel_score", "cadd_phred"],
         gene_column="gene_id",
         impute_strategy="median",
         scaler="standard",
@@ -76,8 +76,10 @@ def test_missing_indicator_columns_survive_artifact_roundtrip(
     first = processor.transform(val_df)
     second = loaded.transform(val_df)
 
-    assert "feat_a__is_missing" in first.columns
-    assert "feat_b__is_missing" in first.columns
-    assert first[["feat_a__is_missing", "feat_b__is_missing"]].equals(
-        second[["feat_a__is_missing", "feat_b__is_missing"]]
+    assert "revel_score__is_missing" in first.columns
+    assert "cadd_phred__is_missing" in first.columns
+    assert first[["revel_score__is_missing", "cadd_phred__is_missing"]].equals(
+        second[["revel_score__is_missing", "cadd_phred__is_missing"]]
     )
+
+

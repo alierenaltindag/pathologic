@@ -12,8 +12,204 @@ from sklearn.metrics import f1_score
 from pathologic import PathoLogic
 from pathologic.data.loader import build_holdout_split
 from pathologic.data.preprocessor import FoldPreprocessor
+from pathologic.models import get_model_metadata
 from pathologic.nas.search import NASearch
 from pathologic.search.spec import BudgetProfile, CandidateSpec
+
+
+NEURAL_MODEL_FAMILIES = frozenset({"neural-network", "tabular-neural-network"})
+
+
+def _candidate_aliases(candidate: CandidateSpec) -> tuple[str, ...]:
+    if candidate.kind == "single" and candidate.members:
+        return (str(candidate.members[0]),)
+    return tuple(str(alias) for alias in candidate.members)
+
+
+def candidate_model_families(candidate: CandidateSpec) -> tuple[str, ...]:
+    aliases = _candidate_aliases(candidate)
+    families: list[str] = []
+    for alias in aliases:
+        metadata = get_model_metadata(alias)
+        families.append(str(metadata.family))
+    return tuple(families)
+
+
+def is_neural_model_alias(alias: str) -> bool:
+    metadata = get_model_metadata(str(alias))
+    return str(metadata.family) in NEURAL_MODEL_FAMILIES
+
+
+def hybrid_neural_member_aliases(candidate: CandidateSpec) -> tuple[str, ...]:
+    if candidate.kind != "hybrid_pair":
+        return tuple()
+    aliases: list[str] = []
+    for alias in candidate.members:
+        if is_neural_model_alias(str(alias)):
+            aliases.append(str(alias))
+    return tuple(aliases)
+
+
+def should_run_nas_for_candidate(candidate: CandidateSpec) -> bool:
+    if candidate.kind == "single":
+        families = candidate_model_families(candidate)
+        return any(family in NEURAL_MODEL_FAMILIES for family in families)
+    if candidate.kind == "hybrid_pair":
+        return bool(hybrid_neural_member_aliases(candidate))
+    return False
+
+
+def candidate_stage_order(candidate: CandidateSpec) -> tuple[str, ...]:
+    if candidate.kind == "hybrid_pair":
+        return (
+            "nas",
+            "hpo_level1",
+            "hpo_level2",
+            "train",
+            "evaluate",
+            "explainability",
+            "calibration_fit",
+            "calibration_eval",
+        )
+
+    if should_run_nas_for_candidate(candidate):
+        return (
+            "nas",
+            "hpo",
+            "train",
+            "evaluate",
+            "explainability",
+            "calibration_fit",
+            "calibration_eval",
+        )
+    return (
+        "hpo",
+        "nas",
+        "train",
+        "evaluate",
+        "explainability",
+        "calibration_fit",
+        "calibration_eval",
+    )
+
+
+def skipped_nas_result(*, reason: str) -> dict[str, Any]:
+    return {
+        "status": "skipped",
+        "reason": str(reason),
+        "trials": 0,
+    }
+
+
+def split_hybrid_hpo_search_space(
+    search_space: dict[str, dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Split hybrid tuning space into member-level and strategy/meta-level spaces."""
+    level1_member_space: dict[str, dict[str, Any]] = {}
+    level2_strategy_space: dict[str, dict[str, Any]] = {}
+
+    for key, spec in search_space.items():
+        if not isinstance(spec, dict):
+            continue
+
+        key_text = str(key)
+        if key_text.startswith("member__"):
+            level1_member_space[key_text] = dict(spec)
+            continue
+
+        if (
+            key_text == "strategy"
+            or key_text == "meta_model_alias"
+            or key_text.startswith("strategy__")
+            or key_text.startswith("meta__")
+        ):
+            level2_strategy_space[key_text] = dict(spec)
+
+    return level1_member_space, level2_strategy_space
+
+
+def build_hybrid_neural_nas_search_space(
+    *,
+    candidate: CandidateSpec,
+    search_space: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Return only neural-member namespaced keys for hybrid NAS."""
+    neural_aliases = set(hybrid_neural_member_aliases(candidate))
+    if not neural_aliases:
+        return {}
+
+    filtered: dict[str, dict[str, Any]] = {}
+    for key, spec in search_space.items():
+        if not isinstance(spec, dict):
+            continue
+        key_text = str(key)
+        if not key_text.startswith("member__"):
+            continue
+        parts = key_text.split("__", 2)
+        if len(parts) != 3:
+            continue
+        member_alias = str(parts[1])
+        if member_alias not in neural_aliases:
+            continue
+        filtered[key_text] = dict(spec)
+    return filtered
+
+
+def merge_hpo_level_results(
+    *,
+    level1_result: dict[str, Any],
+    level2_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge two-level hybrid HPO outputs into one backward-compatible payload."""
+    level1_best = level1_result.get("best_params")
+    level2_best = level2_result.get("best_params")
+
+    merged_best_params: dict[str, Any] = {}
+    if isinstance(level1_best, dict):
+        merged_best_params.update(level1_best)
+    if isinstance(level2_best, dict):
+        merged_best_params.update(level2_best)
+
+    level2_score = _safe_metric(level2_result.get("best_score"))
+    level1_score = _safe_metric(level1_result.get("best_score"))
+    if level2_score != float("-inf"):
+        best_score = float(level2_score)
+    elif level1_score != float("-inf"):
+        best_score = float(level1_score)
+    else:
+        best_score = float("nan")
+
+    if isinstance(level2_best, dict):
+        selected_source = "hpo_level2_after_level1"
+    elif isinstance(level1_best, dict):
+        selected_source = "hpo_level1"
+    else:
+        selected_source = "defaults"
+
+    statuses = {str(level1_result.get("status")), str(level2_result.get("status"))}
+    if "ok" in statuses:
+        status = "ok"
+    elif "failed" in statuses:
+        status = "failed"
+    else:
+        status = "skipped"
+
+    trials = 0
+    for payload in (level1_result, level2_result):
+        value = payload.get("trials")
+        if isinstance(value, int):
+            trials += int(value)
+            continue
+        if isinstance(value, list):
+            trials += len(value)
+
+    return {
+        "status": status,
+        "best_params": merged_best_params,
+        "best_score": best_score,
+        "selected_params_source": selected_source,
+        "trials": trials,
+    }
 
 
 def _safe_metric(value: Any) -> float:
@@ -36,24 +232,53 @@ def run_hpo(
     cv_splits: int,
     n_trials_override: int | None,
     on_trial_complete: Callable[[dict[str, Any]], None] | None = None,
+    search_space_override: dict[str, dict[str, Any]] | None = None,
+    base_model_params_override: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if not model._resolve_model_config().get("tuning_search_space"):  # noqa: SLF001
+    resolved_model_config = model._resolve_model_config()  # noqa: SLF001
+    if search_space_override is None:
+        raw_space = resolved_model_config.get("tuning_search_space")
+    else:
+        raw_space = search_space_override
+
+    if not isinstance(raw_space, dict) or not raw_space:
         return {"status": "skipped", "reason": "missing_tuning_search_space"}
 
+    search_space = {
+        str(key): dict(spec)
+        for key, spec in raw_space.items()
+        if isinstance(spec, dict)
+    }
+    if not search_space:
+        return {"status": "skipped", "reason": "missing_tuning_search_space"}
+
+    base_model_params = {
+        str(key): value for key, value in dict(base_model_params_override or {}).items()
+    }
+
     n_trials = int(n_trials_override) if n_trials_override is not None else budget.n_trials
-    return model.tune(
-        train_csv,
-        engine=tune_engine,
-        objective=objective,
-        n_trials=n_trials,
-        max_trials=n_trials,
-        timeout_minutes=budget.timeout_minutes,
-        callbacks=[on_trial_complete] if on_trial_complete is not None else None,
-        split={
-            "mode": "cross_validation",
-            "cross_validation": {"n_splits": int(cv_splits), "stratified": True},
-        },
-    )
+    previous_runtime_config = dict(getattr(model, "_runtime_model_config", {}) or {})
+    runtime_config = dict(resolved_model_config)
+    runtime_config["tuning_search_space"] = search_space
+    runtime_config.update(base_model_params)
+
+    try:
+        model._runtime_model_config = runtime_config  # noqa: SLF001
+        return model.tune(
+            train_csv,
+            engine=tune_engine,
+            objective=objective,
+            n_trials=n_trials,
+            max_trials=n_trials,
+            timeout_minutes=budget.timeout_minutes,
+            callbacks=[on_trial_complete] if on_trial_complete is not None else None,
+            split={
+                "mode": "cross_validation",
+                "cross_validation": {"n_splits": int(cv_splits), "stratified": True},
+            },
+        )
+    finally:
+        model._runtime_model_config = previous_runtime_config  # noqa: SLF001
 
 
 def build_nas_arrays(

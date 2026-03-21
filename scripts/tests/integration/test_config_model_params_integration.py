@@ -31,7 +31,7 @@ def test_mlp_params_are_loaded_from_defaults(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "split": {"n_splits": 3, "stratified": True},
         "preprocess": {
@@ -72,7 +72,7 @@ def test_mlp_max_epochs_falls_back_to_train_epochs(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "split": {"n_splits": 3, "stratified": True},
         "preprocess": {
@@ -129,7 +129,7 @@ def test_mlp_architecture_max_epochs_overrides_model_and_train(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "split": {"n_splits": 3, "stratified": True},
         "preprocess": {
@@ -159,3 +159,4 @@ def test_mlp_architecture_max_epochs_overrides_model_and_train(
 
     assert model._trained_model is not None
     assert model._trained_model._max_epochs == 3
+

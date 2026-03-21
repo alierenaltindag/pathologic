@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from pathologic.search.data import resolve_search_defaults_from_defaults
 
 from scripts.search_best_model import (
     _configure_windows_joblib_cpu_detection,
@@ -224,6 +225,9 @@ def test_prepare_dataset_retains_error_analysis_columns_without_feature_encoding
 def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     parser = build_arg_parser()
     args = parser.parse_args(["data.csv"])
+    expected_max_hybrid_size = int(
+        resolve_search_defaults_from_defaults().get("max_hybrid_combination_size", 2)
+    )
 
     assert args.verbose_inner_search is False
     assert args.model_pool == "xgboost,catboost,lightgbm"
@@ -232,7 +236,7 @@ def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     assert args.hybrid_strategy == "soft_voting"
     assert args.hybrid_weighting_policy == "auto"
     assert args.hybrid_tune_strategy_and_params is True
-    assert args.max_hybrid_combination_size == 2
+    assert args.max_hybrid_combination_size == expected_max_hybrid_size
 
 
 def test_arg_parser_allows_verbose_inner_search_flag() -> None:
@@ -353,15 +357,15 @@ def test_extract_scores_from_model_aligns_labels_after_row_drop() -> None:
     frame = pd.DataFrame(
         {
             "label": [1, 0, 1],
-            "feat_a": [0.1, 0.2, 0.3],
-            "feat_b": [1.1, 1.2, 1.3],
+            "revel_score": [0.1, 0.2, 0.3],
+            "cadd_phred": [1.1, 1.2, 1.3],
         }
     )
 
     y_true, scores = _extract_scores_from_model(
         model=_ModelStub(),
         dataset=frame,
-        feature_columns=["feat_a", "feat_b"],
+        feature_columns=["revel_score", "cadd_phred"],
         label_column="label",
     )
 
@@ -434,3 +438,4 @@ def test_suppress_known_parallel_warnings_filters_loky_noise() -> None:
         warnings.warn("Could not find the number of physical cores", UserWarning)
 
     assert len(caught) == 0
+

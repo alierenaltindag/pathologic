@@ -373,15 +373,15 @@ def test_extract_scores_from_model_aligns_labels_after_row_drop() -> None:
     frame = pd.DataFrame(
         {
             "label": [1, 0, 1],
-            "feat_a": [0.1, 0.2, 0.3],
-            "feat_b": [1.1, 1.2, 1.3],
+            "revel_score": [0.1, 0.2, 0.3],
+            "cadd_phred": [1.1, 1.2, 1.3],
         }
     )
 
     y_true, scores = _extract_scores_from_model(
         model=_ModelStub(),
         dataset=frame,
-        feature_columns=["feat_a", "feat_b"],
+        feature_columns=["revel_score", "cadd_phred"],
         label_column="label",
     )
 
@@ -454,3 +454,4 @@ def test_suppress_known_parallel_warnings_filters_loky_noise() -> None:
         warnings.warn("Could not find the number of physical cores", UserWarning)
 
     assert len(caught) == 0
+

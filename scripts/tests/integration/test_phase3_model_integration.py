@@ -92,7 +92,7 @@ def test_mlp_architecture_file_from_defaults(
     data_path = tmp_path / "variants.csv"
     data_path.write_text(
         (
-            "variant_id,gene_id,label,feat_a,feat_b\n"
+            "variant_id,gene_id,label,revel_score,cadd_phred\n"
             "1,G1,1,0.1,1.0\n"
             "2,G1,0,0.2,1.1\n"
             "3,G2,1,0.3,0.9\n"
@@ -113,7 +113,7 @@ def test_mlp_architecture_file_from_defaults(
             "      - type: dense\n"
             "        units: 40\n"
             "      - type: gene_batch_norm\n"
-            "        features: [feat_a]\n"
+            "        features: [revel_score]\n"
             "      - type: dense\n"
             "        units: 20\n"
             "  activation: tanh\n"
@@ -127,7 +127,7 @@ def test_mlp_architecture_file_from_defaults(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "split": {"n_splits": 3, "stratified": True},
         "preprocess": {
@@ -150,6 +150,7 @@ def test_mlp_architecture_file_from_defaults(
     assert model._trained_model is not None
     assert model._preprocessor is not None
     assert model._preprocessor.per_gene is True
-    assert model._preprocessor.per_gene_features == ["feat_a"]
+    assert model._preprocessor.per_gene_features == ["revel_score"]
     assert model._trained_model.layer_specs[0]["units"] == 40
     assert model._trained_model.layer_specs[2]["units"] == 20
+

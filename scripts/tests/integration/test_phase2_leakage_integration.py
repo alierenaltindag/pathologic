@@ -10,7 +10,7 @@ from pathologic.data.loader import build_folds, load_dataset, validate_schema
 @pytest.mark.integration
 def test_gene_variants_never_cross_train_validation(variant_csv_path: str) -> None:
     df = load_dataset(variant_csv_path)
-    validate_schema(df, required_feature_columns=["feat_a", "feat_b"])
+    validate_schema(df, required_feature_columns=["revel_score", "cadd_phred"])
 
     folds = build_folds(
         df,
@@ -50,7 +50,7 @@ def test_pathologic_train_supports_holdout_split_mode(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "split": {
             "mode": "holdout",
@@ -86,3 +86,4 @@ def test_pathologic_train_supports_holdout_split_mode(
     assert summary["train_val_shared_genes"] == 0
     assert summary["train_test_shared_genes"] == 0
     assert summary["val_test_shared_genes"] == 0
+

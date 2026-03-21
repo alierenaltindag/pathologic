@@ -110,9 +110,9 @@ def test_mlp_architecture_extracts_gene_batch_norm_hints(tmp_path: Path) -> None
             "      - type: dense\n"
             "        units: 32\n"
             "      - type: batch_norm\n"
-            "        features: [feat_b]\n"
+            "        features: [cadd_phred]\n"
             "      - type: gene_batch_norm\n"
-            "        features: [feat_a]\n"
+            "        features: [revel_score]\n"
         ),
         encoding="utf-8",
     )
@@ -121,8 +121,8 @@ def test_mlp_architecture_extracts_gene_batch_norm_hints(tmp_path: Path) -> None
 
     assert hints["scaler"] == "standard"
     assert hints["per_gene"] is True
-    assert hints["per_gene_features"] == ["feat_a"]
-    assert hints["scaler_features"] == ["feat_b"]
+    assert hints["per_gene_features"] == ["revel_score"]
+    assert hints["scaler_features"] == ["cadd_phred"]
 
 
 def test_mlp_wrapper_supports_optional_early_stopping() -> None:
@@ -354,3 +354,4 @@ def test_tabnet_wrapper_handles_reduce_on_plateau_scheduler_request() -> None:
     model.fit(x, y)
     probs = model.predict_proba(x)
     assert probs.shape[0] == x.shape[0]
+

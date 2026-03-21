@@ -21,7 +21,7 @@ def test_validate_schema_raises_on_missing_required_columns(variant_frame: pd.Da
             broken,
             label_column="label",
             gene_column="gene_id",
-            required_feature_columns=["feat_a", "feat_b"],
+            required_feature_columns=["revel_score", "cadd_phred"],
         )
 
 
@@ -30,7 +30,7 @@ def test_validate_schema_accepts_required_columns(variant_frame: pd.DataFrame) -
         variant_frame,
         label_column="label",
         gene_column="gene_id",
-        required_feature_columns=["feat_a", "feat_b"],
+        required_feature_columns=["revel_score", "cadd_phred"],
     )
 
 
@@ -102,3 +102,4 @@ def test_build_holdout_split_rejects_invalid_ratios(variant_frame: pd.DataFrame)
             val_size=0.4,
             random_state=42,
         )
+

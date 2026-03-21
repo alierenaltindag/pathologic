@@ -49,6 +49,8 @@ search:
   hybrid_stacking_cv: 3
   # Blending icin holdout orani.
   hybrid_blend_size: 0.2
+  # Hibrit kombinasyonlardaki maksimum model sayisi
+  max_hybrid_combination_size: 3
   # Hibrit strateji ve stratejiye ozel parametre tuning alanini aktif eder.
   # true oldugunda strategy + meta_model_alias da HPO/NAS aramasina dahil edilir.
   hybrid_tune_strategy_and_params: true
@@ -77,7 +79,6 @@ search:
         low: 0.15
         high: 0.25
     balanced:
-      max_hybrid_combination_size: 3
       strategy: [soft_voting, hard_voting, stacking, blending]
       weighting_policy:
         [auto, manual, equal, inverse_error, objective_proportional]
@@ -121,12 +122,10 @@ data:
   label_column: label
   # Gen kimliğini tutan ve group-based split için kullanılan sütunu belirtir.
   gene_column: gene_id
-  # Model eğitimi öncesinde veri setinde bulunması zorunlu özellikleri listeler.
+  # Model egitimi oncesinde veri setinde bulunmasi zorunlu ozellikleri listeler.
   required_features:
-    # Birinci zorunlu örnek özellik adını belirtir.
-    - feat_a
-    # İkinci zorunlu örnek özellik adını belirtir.
-    - feat_b
+    - revel_score
+    - cadd_phred
   # Model/member bazli feature yonlendirme (opsiyonel).
   # single: tek model alias -> feature listesi
   # hybrid: hibrit alias -> members -> alias -> feature listesi

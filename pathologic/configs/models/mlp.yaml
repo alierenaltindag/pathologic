@@ -69,8 +69,6 @@ model:
         activation: relu
       - type: dropout
         p: 0.2
-      - type: gene_batch_norm
-        features: [feat_a]
 
   # Varsayilan aktivasyon (layer bazinda override edilebilir).
   activation: relu

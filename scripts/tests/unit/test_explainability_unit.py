@@ -52,9 +52,9 @@ class _DummyHybridModel:
 
 
 def test_biological_mapper_generates_labels_and_narratives() -> None:
-    mapper = BiologicalMapper(mapping={"feat_a": "Domain conservation score"})
+    mapper = BiologicalMapper(mapping={"revel_score": "Domain conservation score"})
 
-    assert mapper.label_for("feat_a") == "Domain conservation score"
+    assert mapper.label_for("revel_score") == "Domain conservation score"
     assert mapper.label_for("domain_length") == "Protein domain feature"
 
     narrative = mapper.narrative_for_top_features(
@@ -85,7 +85,7 @@ def test_false_positive_analyzer_returns_risk_ratio_sorted_hotspots() -> None:
 
 def test_explainability_schema_to_dict_contract() -> None:
     feature_item = FeatureAttribution(
-        feature="feat_a",
+        feature="revel_score",
         contribution=0.2,
         absolute_contribution=0.2,
         biological_label="Engineered quantitative feature",
@@ -108,7 +108,7 @@ def test_explainability_schema_to_dict_contract() -> None:
     payload = report.to_dict()
 
     assert payload["backend"] == "proxy"
-    assert payload["global_feature_importance"][0]["feature"] == "feat_a"
+    assert payload["global_feature_importance"][0]["feature"] == "revel_score"
     assert payload["sample_explanations"][0]["predicted_label"] == 1
 
 
@@ -138,7 +138,7 @@ def test_service_ignores_missing_optional_group_columns() -> None:
 
 def test_visualizer_generates_html_document() -> None:
     feature_item = FeatureAttribution(
-        feature="feat_a",
+        feature="revel_score",
         contribution=0.4,
         absolute_contribution=0.4,
         biological_label="Engineered quantitative feature",
@@ -165,14 +165,14 @@ def test_visualizer_generates_html_document() -> None:
     assert "PathoLogic Explainability Report" in html
     assert "Yontem Ozeti (Turkce)" in html
     assert "false_positive_rate / overall_false_positive_rate" in html
-    assert "feat_a" in html
+    assert "revel_score" in html
     assert "relative_strength" in html
     assert "cards" in html
 
 
 def test_visualizer_handles_heterogeneous_hotspot_columns() -> None:
     feature_item = FeatureAttribution(
-        feature="feat_a",
+        feature="revel_score",
         contribution=0.3,
         absolute_contribution=0.3,
         biological_label="Engineered quantitative feature",
@@ -213,7 +213,7 @@ def test_visualizer_handles_heterogeneous_hotspot_columns() -> None:
 
 def test_visualizer_renders_member_explainability_section() -> None:
     feature_item = FeatureAttribution(
-        feature="feat_a",
+        feature="revel_score",
         contribution=0.3,
         absolute_contribution=0.3,
         biological_label="Engineered quantitative feature",
@@ -232,7 +232,7 @@ def test_visualizer_renders_member_explainability_section() -> None:
                     "backend": "proxy",
                     "global_feature_importance": [
                         {
-                            "feature": "feat_a",
+                            "feature": "revel_score",
                             "absolute_contribution": 0.3,
                             "biological_label": "Engineered quantitative feature",
                         }
@@ -306,3 +306,4 @@ def test_service_builds_member_explainability_for_hybrid_model() -> None:
     assert abs(float(members["tabnet"]["weight"]) - 0.6) < 1e-6
     assert abs(float(members["xgboost"]["weight"]) - 0.4) < 1e-6
     assert "effective_member_weights" in payload["metadata"]
+

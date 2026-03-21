@@ -109,14 +109,14 @@ def test_train_accepts_single_model_feature_routing_override(
         variant_csv_path,
         feature_routing={
             "single": {
-                "logreg": ["feat_a"],
+                "logreg": ["revel_score"],
             }
         },
     )
 
     predictions = model.predict(variant_csv_path)
 
-    assert model._feature_columns == ["feat_a"]  # noqa: SLF001
+    assert model._feature_columns == ["revel_score"]  # noqa: SLF001
     assert len(predictions) > 0
 
 
@@ -131,8 +131,8 @@ def test_train_accepts_hybrid_member_feature_routing_override(
             "hybrid": {
                 "logreg+xgboost": {
                     "members": {
-                        "logreg": ["feat_a"],
-                        "xgboost": ["feat_b"],
+                        "logreg": ["revel_score"],
+                        "xgboost": ["cadd_phred"],
                     }
                 }
             }
@@ -141,7 +141,7 @@ def test_train_accepts_hybrid_member_feature_routing_override(
 
     predictions = model.predict(variant_csv_path)
 
-    assert model._feature_columns == ["feat_a", "feat_b"]  # noqa: SLF001
+    assert model._feature_columns == ["revel_score", "cadd_phred"]  # noqa: SLF001
     assert len(predictions) > 0
 
 
@@ -152,10 +152,11 @@ def test_train_filters_out_excluded_columns_override(
     model = PathoLogic("logreg")
     model.train(
         variant_csv_path,
-        excluded_columns=["feat_b"],
+        excluded_columns=["cadd_phred"],
     )
 
     predictions = model.predict(variant_csv_path)
 
-    assert model._feature_columns == ["feat_a"]  # noqa: SLF001
+    assert model._feature_columns == ["revel_score"]  # noqa: SLF001
     assert len(predictions) > 0
+

@@ -196,8 +196,69 @@ def test_search_best_model_hybrid_hpo_includes_member_regularization_params(tmp_
     row = hybrid_rows[0]
     hpo = row.get("hpo")
     assert isinstance(hpo, dict)
+    hpo_level1 = row.get("hpo_level1")
+    hpo_level2 = row.get("hpo_level2")
+    assert isinstance(hpo_level1, dict)
+    assert isinstance(hpo_level2, dict)
+    assert hpo_level1.get("status") in {"ok", "skipped", "failed"}
+    assert hpo_level2.get("status") in {"ok", "skipped", "failed"}
+
     best_params = hpo.get("best_params")
     assert isinstance(best_params, dict)
     assert "member__xgboost__reg_alpha" in best_params
     assert "member__xgboost__reg_lambda" in best_params
     assert "member__catboost__l2_leaf_reg" in best_params
+
+
+def test_search_best_model_hybrid_runs_nas_only_for_neural_member(tmp_path: Path) -> None:
+    output_dir = tmp_path / "model_search_hybrid_nas_out"
+    cmd = [
+        sys.executable,
+        "scripts/search_best_model.py",
+        "data.csv",
+        "--output-dir",
+        str(output_dir),
+        "--budget-profile",
+        "quick",
+        "--tune-engine",
+        "random",
+        "--model-pool",
+        "tabnet,xgboost",
+        "--max-candidates",
+        "3",
+        "--n-trials",
+        "1",
+        "--nas-candidates",
+        "1",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr + "\n" + result.stdout
+
+    run_dirs = sorted(output_dir.glob("search_*"))
+    assert run_dirs, "Expected at least one run directory"
+    run_dir = run_dirs[-1]
+
+    leaderboard = json.loads((run_dir / "leaderboard.json").read_text(encoding="utf-8"))
+    rows = leaderboard.get("rows", [])
+    assert isinstance(rows, list) and rows
+
+    hybrid_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and row.get("kind") == "hybrid_pair"
+        and set(str(row.get("candidate", "")).split("+")) == {"tabnet", "xgboost"}
+    ]
+    assert hybrid_rows, "Expected tabnet+xgboost hybrid row"
+
+    row = hybrid_rows[0]
+    nas = row.get("nas")
+    assert isinstance(nas, dict)
+    assert nas.get("status") == "ok"
+    nas_best_params = nas.get("best_params")
+    assert isinstance(nas_best_params, dict)
+    assert any(str(key).startswith("member__tabnet__") for key in nas_best_params)
+    assert all(not str(key).startswith("member__xgboost__") for key in nas_best_params)
+
+    assert isinstance(row.get("hpo_level1"), dict)
+    assert isinstance(row.get("hpo_level2"), dict)

@@ -34,7 +34,7 @@ def test_core_tune_runs_random_engine(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "split": {
             "mode": "cross_validation",
@@ -100,7 +100,7 @@ def test_core_tune_is_reproducible_with_same_seed(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "split": {
             "mode": "cross_validation",
@@ -183,7 +183,7 @@ def test_core_train_works_with_cuda_request_and_cpu_fallback(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "split": {
             "mode": "cross_validation",
@@ -250,8 +250,8 @@ def test_core_train_falls_back_when_per_gene_enabled_but_gene_missing(
         {
             "variant_id": ["v1", "v2", "v3", "v4", "v5", "v6"],
             "label": [1, 0, 1, 0, 1, 0],
-            "feat_a": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-            "feat_b": [1.0, 1.1, 0.9, 1.2, 1.3, 0.8],
+            "revel_score": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            "cadd_phred": [1.0, 1.1, 0.9, 1.2, 1.3, 0.8],
         }
     ).to_csv(csv_path, index=False)
 
@@ -262,7 +262,7 @@ def test_core_train_falls_back_when_per_gene_enabled_but_gene_missing(
         "data": {
             "label_column": "label",
             "gene_column": "gene_id",
-            "required_features": ["feat_a", "feat_b"],
+            "required_features": ["revel_score", "cadd_phred"],
         },
         "train": {
             "epochs": 5,
@@ -309,3 +309,4 @@ def test_core_train_falls_back_when_per_gene_enabled_but_gene_missing(
 
     assert model.is_trained is True
     assert model.last_train_metrics
+

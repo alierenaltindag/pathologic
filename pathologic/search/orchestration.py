@@ -13,6 +13,7 @@ import pandas as pd
 
 from pathologic import PathoLogic
 from pathologic.search import evaluation as _search_evaluation
+from pathologic.search import hpo_nas as _search_hpo_nas
 from pathologic.search import progress as _search_progress
 from pathologic.search.logging import emit
 from pathologic.search.spec import BudgetProfile, CandidateSpec
@@ -51,15 +52,7 @@ def run_candidate_search_loop(
         for index, candidate in enumerate(candidates, start=1):
             step_start = monotonic()
 
-            stage_order = (
-                "hpo",
-                "nas",
-                "train",
-                "evaluate",
-                "explainability",
-                "calibration_fit",
-                "calibration_eval",
-            )
+            stage_order = _search_hpo_nas.candidate_stage_order(candidate)
             with step_progress(
                 total=len(stage_order),
                 desc=f"{candidate.name} stages",

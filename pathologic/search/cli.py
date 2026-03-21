@@ -25,7 +25,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     hybrid_meta_model_default = str(search_defaults.get("hybrid_meta_model", "logreg"))
     hybrid_stacking_cv_default = int(search_defaults.get("hybrid_stacking_cv", 3))
     hybrid_blend_size_default = float(search_defaults.get("hybrid_blend_size", 0.2))
-    max_hybrid_combination_size_default = int(search_defaults.get("max_hybrid_combination_size", 3))
+    max_hybrid_combination_size_default = int(search_defaults.get("max_hybrid_combination_size", 2))
     hybrid_tune_strategy_default = bool(search_defaults.get("hybrid_tune_strategy_and_params", True))
     regularization_profile_default = str(search_defaults.get("regularization_profile", "auto"))
     regularization_models_default_raw = search_defaults.get(

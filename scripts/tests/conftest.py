@@ -14,7 +14,7 @@ def fake_dataset_path(tmp_path: Path) -> str:
     path = tmp_path / "dummy_variants.csv"
     path.write_text(
         (
-            "variant_id,gene_id,label,feat_a,feat_b\n"
+            "variant_id,gene_id,label,revel_score,cadd_phred\n"
             "1,GENE1,1,0.1,1.0\n"
             "2,GENE1,0,0.2,1.1\n"
             "3,GENE2,1,0.3,0.9\n"
@@ -45,8 +45,8 @@ def variant_frame() -> pd.DataFrame:
             ],
             "gene_id": ["G1", "G1", "G2", "G2", "G3", "G3", "G4", "G4", "G5"],
             "label": [1, 0, 1, 0, 1, 0, 0, 0, 1],
-            "feat_a": [0.1, None, 0.3, 0.5, 0.2, 0.6, 0.9, 0.8, 0.4],
-            "feat_b": [1.0, 1.1, None, 0.9, 1.3, 1.2, 0.7, 0.6, 1.5],
+            "revel_score": [0.1, None, 0.3, 0.5, 0.2, 0.6, 0.9, 0.8, 0.4],
+            "cadd_phred": [1.0, 1.1, None, 0.9, 1.3, 1.2, 0.7, 0.6, 1.5],
         }
     )
 
@@ -57,3 +57,4 @@ def variant_csv_path(tmp_path: Path, variant_frame: pd.DataFrame) -> str:
     file_path = tmp_path / "variants.csv"
     variant_frame.to_csv(file_path, index=False)
     return str(file_path)
+
