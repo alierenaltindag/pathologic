@@ -1,0 +1,14 @@
+[MESSAGES CONTROL]
+disable=
+    broad-exception-caught,
+    import-outside-toplevel,
+    logging-fstring-interpolation,
+    missing-function-docstring,
+    missing-module-docstring,
+    invalid-name,
+    disallowed-name,
+    line-too-long,
+    trailing-whitespace,
+    dangerous-default-value,
+    protected-access,
+    import-error
