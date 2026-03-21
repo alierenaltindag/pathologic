@@ -77,7 +77,14 @@ fi
 
 # Execute Quarto with the found binary
 export QUARTO_PYTHON=$(which python)
-$QUARTO_BIN render reports/model_performance_report.qmd -P csv_path:"$RELATIVE_CSV_PATH"
+CURRENT_TIME=$(date "+%Y-%m-%d %H:%M:%S")
+HOSTNAME=$(hostname)
+
+$QUARTO_BIN render reports/model_performance_report.qmd \
+    -P csv_path:"$RELATIVE_CSV_PATH" \
+    -P run_profile:"$BUDGET_PROFILE" \
+    -P run_machine:"$HOSTNAME" \
+    -P run_time:"$CURRENT_TIME"
 
 echo ""
 echo "=========================================================="
