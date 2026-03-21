@@ -10,7 +10,6 @@ import pandas as pd
 from pathologic.search.data import resolve_search_defaults_from_defaults
 
 from scripts.search_best_model import (
-    _configure_windows_joblib_cpu_detection,
     _build_error_analysis_run_summary,
     _build_candidate_specs,
     _build_global_importance_label,
@@ -22,7 +21,6 @@ from scripts.search_best_model import (
     _parse_model_pool,
     _resolve_hybrid_config_for_report,
     _resolve_hybrid_strategy_config,
-    _suppress_known_parallel_warnings,
     build_arg_parser,
     prepare_dataset_for_pathologic,
 )
@@ -408,34 +406,4 @@ def test_build_error_analysis_run_summary_collects_candidate_rows() -> None:
     assert len(payload["rows"]) == 2
     assert payload["rows"][0]["is_winner"] is True
     assert payload["rows"][0]["error_count"] == 10
-
-
-def test_configure_windows_joblib_cpu_detection_sets_env(monkeypatch: Any) -> None:
-    monkeypatch.setattr("scripts.search_best_model.os.name", "nt")
-    monkeypatch.setattr("scripts.search_best_model.os.cpu_count", lambda: 12)
-    monkeypatch.delenv("LOKY_MAX_CPU_COUNT", raising=False)
-
-    _configure_windows_joblib_cpu_detection()
-
-    assert "LOKY_MAX_CPU_COUNT" in os.environ
-    assert os.environ["LOKY_MAX_CPU_COUNT"] == "11"
-
-
-def test_configure_windows_joblib_cpu_detection_keeps_existing_value(monkeypatch: Any) -> None:
-    monkeypatch.setattr("scripts.search_best_model.os.name", "nt")
-    monkeypatch.setattr("scripts.search_best_model.os.cpu_count", lambda: 24)
-    monkeypatch.setenv("LOKY_MAX_CPU_COUNT", "6")
-
-    _configure_windows_joblib_cpu_detection()
-
-    assert os.environ["LOKY_MAX_CPU_COUNT"] == "6"
-
-
-def test_suppress_known_parallel_warnings_filters_loky_noise() -> None:
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        _suppress_known_parallel_warnings()
-        warnings.warn("Could not find the number of physical cores", UserWarning)
-
-    assert len(caught) == 0
 

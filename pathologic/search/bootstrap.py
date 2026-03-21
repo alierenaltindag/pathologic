@@ -116,8 +116,6 @@ def bootstrap_search_run(args: argparse.Namespace, *, budget: BudgetProfile) -> 
     outer_test_df.to_csv(outer_test_csv, index=False)
 
     include_models = parse_model_pool(args.model_pool)
-    if include_models is None:
-        include_models = parse_model_pool(args.models)
     regularization_models = parse_model_pool(getattr(args, "regularization_models", None))
     exclude_models = (
         [item.strip() for item in args.exclude_models.split(",") if item.strip()]

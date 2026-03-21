@@ -1,1 +1,1 @@
-"""Script entrypoints and compatibility helpers."""
+"""Script entrypoints."""

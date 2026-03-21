@@ -18,7 +18,7 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
         "quick",
         "--tune-engine",
         "random",
-        "--models",
+        "--model-pool",
         "logreg,random_forest",
         "--max-candidates",
         "3",

@@ -114,11 +114,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=0.2,
         help="Outer holdout val ratio",
     )
-    parser.add_argument(
-        "--models",
-        default=None,
-        help="Legacy alias for --model-pool (used if --model-pool is empty)",
-    )
     parser.add_argument("--exclude-models", default=None, help="Comma-separated model exclude list")
     parser.add_argument(
         "--disable-hybrids",
