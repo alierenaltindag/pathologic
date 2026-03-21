@@ -45,6 +45,20 @@ def test_build_candidate_specs_includes_all_singles_and_pairs() -> None:
     ]
 
 
+def test_build_candidate_specs_supports_triple_hybrid_combinations() -> None:
+    candidates = _build_candidate_specs(
+        include_models=["logreg", "random_forest", "xgboost"],
+        exclude_models=None,
+        include_hybrids=True,
+        max_hybrid_combination_size=3,
+        max_candidates=None,
+    )
+
+    hybrid_names = [item.name for item in candidates if item.kind == "hybrid_pair"]
+
+    assert "logreg+random_forest+xgboost" in hybrid_names
+
+
 def test_build_pair_tuning_search_space_uses_member_namespace_prefix() -> None:
     search_space = _build_pair_tuning_search_space("logreg", "xgboost")
 
@@ -218,6 +232,7 @@ def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     assert args.hybrid_strategy == "soft_voting"
     assert args.hybrid_weighting_policy == "auto"
     assert args.hybrid_tune_strategy_and_params is True
+    assert args.max_hybrid_combination_size == 2
 
 
 def test_arg_parser_allows_verbose_inner_search_flag() -> None:
