@@ -81,7 +81,7 @@ class CatBoostWrapper:
                     resolved_task_type = "GPU"
                 elif detected_device == "mps":
                     resolved_task_type = "CPU"
-            
+
             if resolved_task_type == "mps":
                 resolved_task_type = "CPU"
 

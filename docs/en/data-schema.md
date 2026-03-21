@@ -7,7 +7,7 @@
 - `label`: binary target (0/1)
 - feature columns listed under `data.required_features`
 
-Default config reference: [pathologic/configs/defaults.yaml](pathologic/configs/defaults.yaml).
+Default config reference: [pathologic/configs/defaults.yaml](../../pathologic/configs/defaults.yaml).
 
 ## Minimal Example
 
@@ -34,14 +34,14 @@ These improve grouped error analysis and explainability hotspots.
 
 Implementation references:
 
-- [pathologic/data/loader.py](pathologic/data/loader.py)
-- [pathologic/data/preprocessor.py](pathologic/data/preprocessor.py)
+- [pathologic/data/loader.py](../../pathologic/data/loader.py)
+- [pathologic/data/preprocessor.py](../../pathologic/data/preprocessor.py)
 
 Test references:
 
-- [tests/unit/test_loader_unit.py](tests/unit/test_loader_unit.py)
-- [tests/integration/test_phase2_leakage_integration.py](tests/integration/test_phase2_leakage_integration.py)
-- [tests/integration/test_phase2_preprocess_artifact_integration.py](tests/integration/test_phase2_preprocess_artifact_integration.py)
+- [tests/unit/test_loader_unit.py](../../tests/unit/test_loader_unit.py)
+- [tests/integration/test_phase2_leakage_integration.py](../../tests/integration/test_phase2_leakage_integration.py)
+- [tests/integration/test_phase2_preprocess_artifact_integration.py](../../tests/integration/test_phase2_preprocess_artifact_integration.py)
 
 ## Config Snippet
 

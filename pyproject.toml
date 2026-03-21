@@ -97,3 +97,15 @@ no_implicit_optional = true
 strict_equality = true
 ignore_missing_imports = true
 files = ["pathologic"]
+
+[tool.pylint.messages_control]
+disable = [
+    "broad-exception-caught",
+    "import-outside-toplevel",
+    "logging-fstring-interpolation",
+    "missing-function-docstring",
+    "missing-module-docstring",
+    "invalid-name",
+    "disallowed-name",
+    "line-too-long",
+]

@@ -47,7 +47,7 @@ class LightGBMWrapper:
         self._using_fallback = False
         self._random_state = random_state
         self._early_stopping_cfg = dict(early_stopping or {})
-        
+
         try:
             lgb_module = importlib.import_module("lightgbm")
             lgbm_classifier = lgb_module.LGBMClassifier
@@ -70,7 +70,7 @@ class LightGBMWrapper:
 
             if scale_pos_weight is not None:
                 params["scale_pos_weight"] = float(scale_pos_weight)
-            
+
             if class_weight:
                 params["class_weight"] = class_weight
 
@@ -85,7 +85,7 @@ class LightGBMWrapper:
                 params["device_type"] = "gpu"
             elif device is not None:
                 params["device_type"] = device
-            
+
             try:
                 self.estimator = lgbm_classifier(**params)
             except Exception as e:

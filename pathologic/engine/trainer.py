@@ -180,7 +180,7 @@ class Trainer:
             return
 
         backend = self.config.ddp_backend
-        # MAC_OPTIMIZATION: Automatically switch to 'gloo' for Apple Silicon since 
+        # MAC_OPTIMIZATION: Automatically switch to 'gloo' for Apple Silicon since
         # 'nccl' is strictly CUDA-only. This prevents crash on MacOS multi-process runs.
         if self.device != "cuda" and backend == "nccl":
             backend = "gloo"
@@ -218,7 +218,7 @@ class Trainer:
         return DDP(module)
 
     def _select_device(self, requested: str) -> str:
-        # MAC_OPTIMIZATION: Safely resolves hardware requested devices ensuring 
+        # MAC_OPTIMIZATION: Safely resolves hardware requested devices ensuring
         # MPS (Metal Performance Shaders) maps correctly if Apple Silicon is detected.
         if requested != "auto":
             preferred = requested.strip().lower()

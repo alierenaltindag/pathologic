@@ -39,13 +39,13 @@ def load_dataset(path: str) -> pd.DataFrame:
 
     if frame.empty:
         raise ValueError("Loaded dataset is empty.")
-        
-    # MAC_OPTIMIZATION / PERFORMANCE: Downcast float64 to float32 to halve memory usage 
+
+    # MAC_OPTIMIZATION / PERFORMANCE: Downcast float64 to float32 to halve memory usage
     # and increase computation speed (cache hits) without losing practical precision.
     float64_cols = frame.select_dtypes(include=['float64']).columns
     if len(float64_cols) > 0:
         frame[float64_cols] = frame[float64_cols].astype(np.float32)
-        
+
     return frame
 
 

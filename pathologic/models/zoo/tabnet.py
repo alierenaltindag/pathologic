@@ -87,7 +87,7 @@ class TabNetWrapper:
 
             self._is_native_tabnet = True
             resolved_device_name = device_name
-            # MAC_OPTIMIZATION: Allow TabNet to utilize MPS on Apple Silicon devices 
+            # MAC_OPTIMIZATION: Allow TabNet to utilize MPS on Apple Silicon devices
             # instead of falling back to CPU when CUDA is missing.
             if resolved_device_name is None:
                 detected_dev = detect_preferred_device()

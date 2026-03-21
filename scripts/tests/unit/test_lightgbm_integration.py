@@ -40,15 +40,15 @@ def test_lightgbm_fit_predict_contract() -> None:
     """Verify fit, predict, and predict_proba contracts."""
     x, y = _sample_binary_data()
     model = create_model("lightgbm", random_state=42)
-    
+
     # Test fit
     model.fit(x, y)
-    
+
     # Test predict
     preds = model.predict(x)
     assert preds.shape == (100,)
     assert set(np.unique(preds)).issubset({0, 1})
-    
+
     # Test predict_proba
     probs = model.predict_proba(x)
     assert probs.shape == (100, 2)
@@ -60,7 +60,7 @@ def test_lightgbm_feature_importances() -> None:
     x, y = _sample_binary_data()
     model = create_model("lightgbm", random_state=42)
     model.fit(x, y)
-    
+
     importances = model.feature_importances_
     assert importances.shape == (10,)
     assert np.all(importances >= 0)
@@ -71,19 +71,19 @@ def test_lightgbm_explainability_compatibility() -> None:
     x, y = _sample_binary_data()
     model = create_model("lightgbm", random_state=42)
     model.fit(x, y)
-    
+
     engine = ShapAttributionEngine(background_size=10, random_state=42)
-    
+
     # Use a small subset for explanation
     x_background = x[:10]
     x_target = x[10:15]
-    
+
     result = engine.compute(
         model=model,
         x_background=x_background,
         x_target=x_target
     )
-    
+
     assert result.contributions.shape == (5, 10)
     assert result.global_importance.shape == (10,)
     # If lightgbm is installed, it should ideally use tree_shap or similar
@@ -94,7 +94,7 @@ def test_lightgbm_explainability_compatibility() -> None:
 def test_lightgbm_params_override() -> None:
     """Verify that custom parameters are passed to the underlying estimator."""
     model = create_model(
-        "lightgbm", 
+        "lightgbm",
         random_state=42,
         model_params={
             "n_estimators": 50,
