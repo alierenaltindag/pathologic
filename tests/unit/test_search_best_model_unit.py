@@ -212,7 +212,7 @@ def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     args = parser.parse_args(["data.csv"])
 
     assert args.verbose_inner_search is False
-    assert args.model_pool == "xgboost,tabnet"
+    assert args.model_pool == "xgboost,catboost,lightgbm"
     assert args.error_analysis_mode == "hybrid"
     assert args.disable_error_analysis is False
     assert args.hybrid_strategy == "soft_voting"

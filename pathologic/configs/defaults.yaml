@@ -31,6 +31,8 @@ ui:
 
 # Search script ve hibrit aday olusturma varsayimlarini tanimlar.
 search:
+  # Search'te varsayilan aday havuzu (single + pair hibrit adaylar buradan uretilir).
+  default_model_pool: xgboost,catboost,lightgbm
   # Cift model adaylari icin varsayilan hibrit strateji.
   # Alternatifler: [soft_voting, hard_voting, stacking, blending]
   hybrid_strategy: soft_voting
@@ -158,6 +160,7 @@ data:
   # Bu listedeki sutunlar pipeline boyunca hic kullanilmaz ve filtrelenir.
   excluded_columns:
     - VariationID
+    - Gene(s)
     - Veri_Kaynagi_Paneli
     - AA_Position
 

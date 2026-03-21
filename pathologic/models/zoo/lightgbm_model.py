@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.model_selection import train_test_split
 
 from pathologic.models.registry import register
 from pathologic.utils import get_logger
@@ -38,12 +39,14 @@ class LightGBMWrapper:
         scale_pos_weight: float | None = None,
         class_weight: str | dict | None = None,
         importance_type: str = "split",
+        early_stopping: dict[str, Any] | None = None,
         device: str | None = None,
         random_state: int = 42,
         **kwargs: Any,
     ) -> None:
         self._using_fallback = False
         self._random_state = random_state
+        self._early_stopping_cfg = dict(early_stopping or {})
         
         try:
             lgb_module = importlib.import_module("lightgbm")
@@ -105,8 +108,50 @@ class LightGBMWrapper:
             )
 
     def fit(self, X: Any, y: Any, **kwargs: Any) -> LightGBMWrapper:
-        """Fit the underlying estimator."""
-        self.estimator.fit(X, y, **kwargs)
+        """Fit the underlying estimator with optional early stopping."""
+        early_enabled = bool(self._early_stopping_cfg.get("enabled", False))
+        if self._using_fallback or not early_enabled:
+            self.estimator.fit(X, y, **kwargs)
+            return self
+
+        validation_split = float(self._early_stopping_cfg.get("validation_split", 0.2))
+        patience = int(self._early_stopping_cfg.get("patience", 10))
+
+        if not (0.0 < validation_split < 1.0) or len(X) <= 4:
+            self.estimator.fit(X, y, **kwargs)
+            return self
+
+        stratify_target: np.ndarray | None = None
+        if np.unique(y).size > 1:
+            stratify_target = y
+
+        try:
+            x_train, x_val, y_train, y_val = train_test_split(
+                X,
+                y,
+                test_size=validation_split,
+                random_state=self._random_state,
+                stratify=stratify_target,
+            )
+        except Exception:
+            self.estimator.fit(X, y, **kwargs)
+            return self
+
+        fit_kwargs: dict[str, Any] = {**kwargs, "eval_set": [(x_val, y_val)]}
+        if patience > 0:
+            fit_kwargs["early_stopping_rounds"] = patience
+
+        try:
+            self.estimator.fit(x_train, y_train, **fit_kwargs)
+        except TypeError:
+            # Some versions have strict sklearn fit signatures; retry without the optional arg.
+            fit_kwargs.pop("early_stopping_rounds", None)
+            try:
+                self.estimator.fit(x_train, y_train, **fit_kwargs)
+            except Exception:
+                self.estimator.fit(X, y, **kwargs)
+        except Exception:
+            self.estimator.fit(X, y, **kwargs)
         return self
 
     def predict(self, X: Any) -> np.ndarray:

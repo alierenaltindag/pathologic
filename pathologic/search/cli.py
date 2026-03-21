@@ -40,6 +40,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     optimize_regularization_in_nas_default = bool(
         search_defaults.get("optimize_regularization_in_nas", False)
     )
+    default_model_pool_raw = search_defaults.get("default_model_pool", "xgboost,tabnet")
+    if isinstance(default_model_pool_raw, str) and default_model_pool_raw.strip():
+        default_model_pool = default_model_pool_raw
+    else:
+        default_model_pool = "xgboost,tabnet"
     error_analysis_mode_default = str(search_defaults.get("error_analysis_mode", "hybrid"))
     explain_top_k_features_default = int(explain_defaults.get("top_k_features", 5))
     explain_top_k_samples_default = int(explain_defaults.get("top_k_samples", 10))
@@ -66,10 +71,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model-pool",
-        default="xgboost,tabnet",
+        default=default_model_pool,
         help=(
             "Comma-separated model pool to evaluate. "
-            "Defaults to xgboost,tabnet (and hybrid combinations unless disabled)."
+            "Defaults to configured search.default_model_pool "
+            "(and hybrid combinations unless disabled)."
         ),
     )
     parser.add_argument(
