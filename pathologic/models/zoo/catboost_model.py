@@ -93,7 +93,7 @@ class CatBoostWrapper:
                     )
                 else:
                     self.estimator = catboost_classifier(**common_params)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                 self.estimator = catboost_classifier(**common_params, task_type="CPU")
                 _LOGGER.warning(
                     f"Native catboost GPU init failed: {e}; falling back to CPU backend."

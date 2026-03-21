@@ -58,7 +58,12 @@ cd pathologic
 uv sync 
 ```
 
-### 3. Running the E2E Pipeline
+### 3. Data Setup
+Before running the pipeline, ensure your data is placed correctly:
+- Raw clinical/variant datasets should go to `data/raw/` (e.g., `data/raw/data.csv`).
+- Cleaned or processed outputs will be generated or should be placed in `data/processed/` (e.g., `data/processed/variants_for_examples.csv`).
+
+### 4. Running the E2E Pipeline
 You can trigger the entire workflow (Training $\rightarrow$ NAS $\rightarrow$ CSV Export $\rightarrow$ Quarto Report) with a single command:
 
 ```bash

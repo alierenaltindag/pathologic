@@ -88,7 +88,7 @@ class LightGBMWrapper:
 
             try:
                 self.estimator = lgbm_classifier(**params)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                 _LOGGER.warning(f"Native lightgbm GPU init failed: {e}; falling back to CPU.")
                 params["device_type"] = "cpu"
                 self.estimator = lgbm_classifier(**params)

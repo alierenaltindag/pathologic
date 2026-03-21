@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 from sklearn.datasets import make_classification
 
 from pathologic.models.factory import create_model
@@ -33,7 +32,7 @@ def test_lightgbm_instantiation() -> None:
     """Verify that lightgbm can be instantiated via the factory."""
     model = create_model("lightgbm", random_state=42)
     assert isinstance(model, LightGBMWrapper)
-    assert model._random_state == 42
+    assert model._random_state  # pylint: disable=protected-access  # pylint: disable=protected-access == 42
 
 
 def test_lightgbm_fit_predict_contract() -> None:
@@ -103,7 +102,7 @@ def test_lightgbm_params_override() -> None:
         }
     )
     # Check if params reach the estimator
-    if not model._using_fallback:
+    if not model._using_fallback  # pylint: disable=protected-access  # pylint: disable=protected-access:
         assert model.estimator.n_estimators == 50
         assert model.estimator.num_leaves == 20
         assert model.estimator.learning_rate == 0.01

@@ -133,26 +133,26 @@ class FoldPreprocessor:
                     transform_df,
                     imputed[self._per_gene_feature_names],
                 )
-                scaled.loc[:, self._per_gene_feature_names] = per_gene_scaled
+                scaled[self._per_gene_feature_names] = per_gene_scaled
             if self._global_scaler_features:
                 if self.scaler is None:
                     raise RuntimeError("Scaler is not fitted.")
                 global_scaled = self.scaler.transform(imputed[self._global_scaler_features])
-                scaled.loc[:, self._global_scaler_features] = global_scaled
+                scaled[self._global_scaler_features] = global_scaled
         else:
             scaled = imputed.copy()
             if self._scaled_features:
                 if self.scaler is None:
                     raise RuntimeError("Scaler is not fitted.")
                 subset_scaled = self.scaler.transform(imputed[self._scaled_features])
-                scaled.loc[:, self._scaled_features] = subset_scaled
+                scaled[self._scaled_features] = subset_scaled
 
         transformed = transform_df.copy()
-        transformed.loc[:, self.numeric_features] = scaled[self.numeric_features]
+        transformed[self.numeric_features] = scaled[self.numeric_features]
         if self._missing_indicator_features:
             indicator_frame = self._build_missing_indicator_frame(transform_df)
             for feature in self._missing_indicator_features:
-                transformed.loc[:, feature] = indicator_frame[feature]
+                transformed[feature] = indicator_frame[feature]
         return transformed
 
     def fit_transform(self, train_df: pd.DataFrame) -> pd.DataFrame:

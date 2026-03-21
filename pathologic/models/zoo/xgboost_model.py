@@ -85,7 +85,7 @@ class XGBoostWrapper:
 
             try:
                 self.estimator = xgb_classifier(**common_params, **gpu_params)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # pylint: disable=broad-exception-caught
                 self.estimator = xgb_classifier(**common_params)
                 _LOGGER.warning(
                     f"Native xgboost {preferred_device} init failed: {e}; falling back to CPU backend."
