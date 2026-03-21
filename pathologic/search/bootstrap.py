@@ -129,6 +129,7 @@ def bootstrap_search_run(args: argparse.Namespace, *, budget: BudgetProfile) -> 
         include_models=include_models,
         exclude_models=exclude_models,
         include_hybrids=not args.disable_hybrids,
+        max_hybrid_combination_size=int(getattr(args, "max_hybrid_combination_size", 2)),
         max_candidates=args.max_candidates,
         hybrid_tune_strategy_and_params=bool(args.hybrid_tune_strategy_and_params),
         hybrid_tuning_search_space=(

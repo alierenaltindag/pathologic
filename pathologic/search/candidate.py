@@ -137,12 +137,18 @@ def model_tuning_search_space(alias: str) -> dict[str, dict[str, Any]]:
     return {}
 
 
-def build_pair_tuning_search_space(member_a: str, member_b: str) -> dict[str, dict[str, Any]]:
+def build_hybrid_tuning_search_space(members: tuple[str, ...]) -> dict[str, dict[str, Any]]:
     search_space: dict[str, dict[str, Any]] = {}
-    for member in (member_a, member_b):
+    for member in members:
         member_space = model_tuning_search_space(member)
         for key, spec in member_space.items():
             search_space[f"member__{member}__{key}"] = dict(spec)
+    return search_space
+
+
+def build_pair_tuning_search_space(member_a: str, member_b: str) -> dict[str, dict[str, Any]]:
+    search_space: dict[str, dict[str, Any]] = {}
+    search_space = build_hybrid_tuning_search_space((member_a, member_b))
     return search_space
 
 
@@ -226,6 +232,7 @@ def build_candidate_specs(
     max_candidates: int | None,
     hybrid_tune_strategy_and_params: bool = False,
     hybrid_tuning_search_space: Mapping[str, dict[str, Any]] | None = None,
+    max_hybrid_combination_size: int = 2,
     regularization_profile: str = "auto",
     regularization_models: list[str] | None = None,
 ) -> list[CandidateSpec]:
@@ -269,47 +276,53 @@ def build_candidate_specs(
             )
         )
 
-    if include_hybrids:
-        for left, right in combinations(singles, 2):
-            pair_name = f"{left}+{right}"
-            pair_search_space = build_pair_tuning_search_space(left, right)
+    if include_hybrids and singles:
+        requested_max_size = int(max_hybrid_combination_size)
+        upper_size = min(requested_max_size, len(singles))
+        if upper_size < 2:
+            upper_size = 1
 
-            if profile_name == "off":
-                pair_search_space = strip_regularization_search_space(
-                    search_space=pair_search_space,
-                    members=(left, right),
-                    regularization_models=None,
-                )
-            elif normalized_regularization_models is not None:
-                pair_search_space = strip_regularization_search_space(
-                    search_space=pair_search_space,
-                    members=(left, right),
-                    regularization_models=None,
-                )
-                pair_search_space.update(
-                    build_member_regularization_tuning_search_space(
-                        members=(left, right),
-                        regularization_models=normalized_regularization_models,
+        for combination_size in range(2, upper_size + 1):
+            for members in combinations(singles, combination_size):
+                pair_name = "+".join(members)
+                pair_search_space = build_hybrid_tuning_search_space(tuple(members))
+
+                if profile_name == "off":
+                    pair_search_space = strip_regularization_search_space(
+                        search_space=pair_search_space,
+                        members=tuple(members),
+                        regularization_models=None,
+                    )
+                elif normalized_regularization_models is not None:
+                    pair_search_space = strip_regularization_search_space(
+                        search_space=pair_search_space,
+                        members=tuple(members),
+                        regularization_models=None,
+                    )
+                    pair_search_space.update(
+                        build_member_regularization_tuning_search_space(
+                            members=tuple(members),
+                            regularization_models=normalized_regularization_models,
+                        )
+                    )
+
+                if hybrid_tune_strategy_and_params:
+                    profile_space = {
+                        str(key): dict(value)
+                        for key, value in dict(hybrid_tuning_search_space or {}).items()
+                        if isinstance(value, dict)
+                    }
+                    if not profile_space:
+                        profile_space = build_hybrid_strategy_tuning_search_space()
+                    pair_search_space.update(profile_space)
+                candidates.append(
+                    CandidateSpec(
+                        name=pair_name,
+                        kind="hybrid_pair",
+                        members=tuple(members),
+                        tuning_search_space=pair_search_space,
                     )
                 )
-
-            if hybrid_tune_strategy_and_params:
-                profile_space = {
-                    str(key): dict(value)
-                    for key, value in dict(hybrid_tuning_search_space or {}).items()
-                    if isinstance(value, dict)
-                }
-                if not profile_space:
-                    profile_space = build_hybrid_strategy_tuning_search_space()
-                pair_search_space.update(profile_space)
-            candidates.append(
-                CandidateSpec(
-                    name=pair_name,
-                    kind="hybrid_pair",
-                    members=(left, right),
-                    tuning_search_space=pair_search_space,
-                )
-            )
 
     if max_candidates is not None and max_candidates > 0:
         candidates = candidates[:max_candidates]
