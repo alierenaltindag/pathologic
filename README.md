@@ -72,9 +72,3 @@ bash scripts/run_full_pipeline.sh aggressive "rf,xgboost,lightgbm,catboost,tabne
 Once the pipeline finishes, PathoLogic automatically processes the nested JSON trial logs, extracts the best metrics (F1, AUC, Recall, etc.), and renders an interactive **Quarto HTML dashboard** complete with Plotly radar charts and scatter plots. The output will be inside the `results/` directory.
 
 ---
-
-## 🤝 Contributing
-Contributions are welcome! Please read the `docs/en/model-plugin-guide.md` if you plan to integrate a new model into the PathoLogic registry.
-
-## 📄 License
-This project is licensed under the MIT License.
