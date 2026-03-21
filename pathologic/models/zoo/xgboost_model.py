@@ -72,28 +72,24 @@ class XGBoostWrapper:
                 common_params["scale_pos_weight"] = 1.0
 
             preferred_device = device
-            # MAC_OPTIMIZATION: XGBoost natively targets Apple Silicon CPU very efficiently.
-            # We explicitly only target GPU parameters if CUDA is present, avoiding 
-            # unsupported native M1/M2/M3 device injections.
-            if preferred_device is None and detect_preferred_device() == "cuda":
-                preferred_device = "cuda"
+            if preferred_device is None:
+                preferred_device = detect_preferred_device()
 
             gpu_params: dict[str, str] = {}
-            if preferred_device == "cuda":
-                gpu_params["device"] = "cuda"
+            if preferred_device in ("cuda", "mps"):
+                gpu_params["device"] = preferred_device
                 gpu_params["tree_method"] = tree_method or "hist"
             elif tree_method is not None:
                 gpu_params["tree_method"] = tree_method
 
             try:
                 self.estimator = xgb_classifier(**common_params, **gpu_params)
-            except Exception:
+            except Exception as e:
                 self.estimator = xgb_classifier(**common_params)
-                if preferred_device == "cuda":
-                    _LOGGER.warning(
-                        "Native xgboost GPU init failed; falling back to CPU backend."
-                    )
-        except Exception:
+                _LOGGER.warning(
+                    f"Native xgboost {preferred_device} init failed: {e}; falling back to CPU backend."
+                )
+        except ImportError:
             self._using_fallback = True
             _LOGGER.warning(
                 "xgboost is not available; using HistGradientBoostingClassifier fallback. "

@@ -74,10 +74,15 @@ class CatBoostWrapper:
                 common_params["auto_class_weights"] = "Balanced"
 
             resolved_task_type = task_type
-            # MAC_OPTIMIZATION: Explicitly avoid passing task_type="GPU" on Apple Silicon.
-            # CatBoost GPU implementation is strictly CUDA-based and will crash on 'mps'.
-            if resolved_task_type is None and detect_preferred_device() == "cuda":
-                resolved_task_type = "GPU"
+            if resolved_task_type is None:
+                detected_device = detect_preferred_device()
+                if detected_device == "cuda":
+                    resolved_task_type = "GPU"
+                elif detected_device == "mps":
+                    resolved_task_type = "CPU"
+            
+            if resolved_task_type == "mps":
+                resolved_task_type = "CPU"
 
             try:
                 if resolved_task_type is not None:
@@ -87,13 +92,12 @@ class CatBoostWrapper:
                     )
                 else:
                     self.estimator = catboost_classifier(**common_params)
-            except Exception:
-                self.estimator = catboost_classifier(**common_params)
-                if resolved_task_type == "GPU":
-                    _LOGGER.warning(
-                        "Native catboost GPU init failed; falling back to CPU backend."
-                    )
-        except Exception:
+            except Exception as e:
+                self.estimator = catboost_classifier(**common_params, task_type="CPU")
+                _LOGGER.warning(
+                    f"Native catboost GPU init failed: {e}; falling back to CPU backend."
+                )
+        except ImportError:
             self._using_fallback = True
             _LOGGER.warning(
                 "catboost is not available; using RandomForestClassifier fallback. "

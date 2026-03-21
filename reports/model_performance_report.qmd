@@ -1,0 +1,157 @@
+---
+title: "Pathologic: Model Performans Raporu"
+author: "Otomatik Raporlama Sistemi"
+date: today
+format: 
+  html:
+    theme: flatly
+    toc: true
+    toc-title: "İçindekiler"
+    number-sections: true
+    smooth-scroll: true
+    code-fold: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+jupyter: python3
+params:
+  csv_path: "../results/model_search/search_20260321_160620/leaderboard_summary.csv"
+---
+
+## Yönetici Özeti
+Bu rapor, farklı makine öğrenmesi modelleri ve hiperparametre optimizasyonu (HPO) stratejileriyle elde edilen sonuçları karşılaştırmaktadır. Değerlendirme, test veri seti üzerindeki temel sınıflandırma metriklerine (F1, Precision, Recall, ROC AUC) dayanmaktadır.
+
+```{python}
+#| label: setup
+#| include: false
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from IPython.display import Markdown, display
+
+# Veriyi Yükle
+csv_path = params.get("csv_path", "")
+df = pd.read_csv(csv_path)
+
+# Sütun isimlerini daha okunabilir hale getirmek için düzenliyoruz
+# Skoru yüksekten düşüğe doğru sıralıyoruz (varsayılan metrik F1)
+if 'test_f1' in df.columns:
+    df = df.sort_values(by="test_f1", ascending=False)
+```
+
+## 1. Genel Model Liderlik Tablosu
+Tüm modellerin performans metriklerini içeren ana tablo. En yüksek F1 skoruna sahip modeller üstte yer almaktadır.
+
+```{python}
+#| label: leaderboard-table
+#| tbl-cap: "Tüm Modellerin Performans Metrikleri"
+
+# Tabloyu formatlıyoruz
+display_df = df.copy()
+display_cols = ['candidate', 'kind', 'test_f1', 'test_precision', 'test_recall', 'test_roc_auc']
+if 'validation_score' in df.columns:
+    display_cols.insert(3, 'validation_score')
+
+# Sadece olan sütunları al
+display_cols = [c for c in display_cols if c in display_df.columns]
+display_df = display_df[display_cols]
+
+# Yuvarlama işlemleri
+num_cols = display_df.select_dtypes(include=['float64']).columns
+display_df[num_cols] = display_df[num_cols].round(4)
+
+# Pandas Styler ile renklendirme (Hücre içi arka plan renkleri)
+styler = display_df.style.background_gradient(cmap='Blues', subset=[c for c in num_cols if 'test_' in c])
+styler
+```
+
+## 2. Genel Performans: F1 Skoru Analizi
+**F1 Skoru**, hem hassasiyet (Precision) hem de duyarlılığı (Recall) dengede tutan ana başarı ölçütüdür.
+
+```{python}
+#| label: fig-f1-scores
+#| fig-cap: "Aday Modellerin Test F1 Skorları"
+
+fig = px.bar(
+    df, 
+    x="candidate", 
+    y="test_f1", 
+    color="kind",
+    text="test_f1",
+    title="Modellere Göre Test F1 Skorları",
+    labels={"candidate": "Model Adı", "test_f1": "F1 Skoru", "kind": "Model Tipi"},
+    color_discrete_sequence=px.colors.qualitative.Pastel
+)
+fig.update_traces(texttemplate='%{text:.3f}', textposition='outside')
+fig.update_layout(yaxis=dict(range=[min(df['test_f1'])*0.9, max(df['test_f1'])*1.05]))
+fig.show()
+```
+
+## 3. Metrik Karşılaştırması (Radar Grafik)
+Aşağıdaki Radar Grafiği, en iyi 5 modelin dört farklı metrikte (F1, Precision, Recall, ROC AUC) nasıl performans gösterdiğini özetler. Alanı en geniş ve en dengeli olan model genel olarak en tutarlı performansı sergiler.
+
+```{python}
+#| label: fig-radar
+#| fig-cap: "En İyi 5 Modelin Çoklu Metrik Profilleri"
+
+top_models = df.head(5)
+metrics = ['test_f1', 'test_precision', 'test_recall', 'test_roc_auc']
+
+fig = go.Figure()
+
+for index, row in top_models.iterrows():
+    fig.add_trace(go.Scatterpolar(
+        r=[row[m] for m in metrics],
+        theta=['F1 Skoru', 'Hassasiyet (Precision)', 'Duyarlılık (Recall)', 'ROC AUC'],
+        fill='toself',
+        name=row['candidate']
+    ))
+
+fig.update_layout(
+    polar=dict(
+        radialaxis=dict(
+            visible=True,
+            range=[0.5, 1.0]
+        )),
+    showlegend=True,
+    title="Model Karakteristikleri (Radar)"
+)
+fig.show()
+```
+
+## 4. Precision vs. Recall (Hassasiyet / Duyarlılık Dengesi)
+Sağ üst köşeye (1.0, 1.0) en yakın olan modeller "Mükemmel" modellerdir. 
+* **Recall'un yüksek olması:** Gerçek pozitif vakaları kaçırmama başarısıdır.
+* **Precision'ın yüksek olması:** Yanlış alarm vererek negatif vakaları pozitif zannetmeme başarısıdır.
+
+```{python}
+#| label: fig-scatter
+#| fig-cap: "Hassasiyet (Precision) ve Duyarlılık (Recall) İlişkisi"
+
+fig = px.scatter(
+    df, 
+    x="test_recall", 
+    y="test_precision", 
+    color="candidate", 
+    size="test_roc_auc",
+    hover_name="candidate",
+    hover_data=["test_f1"],
+    title="Hassasiyet / Duyarlılık Dengesi",
+    labels={
+        "test_recall": "Duyarlılık - Recall (Kaçırmama Gücü)", 
+        "test_precision": "Hassasiyet - Precision (Yanlış Alarm Vermeme Gücü)",
+        "test_roc_auc": "ROC AUC"
+    },
+    size_max=20
+)
+
+# Çapraz referans çizgisi
+fig.add_shape(type="line", x0=0, y0=0, x1=1, y1=1, line=dict(color="gray", dash="dash"))
+fig.update_layout(xaxis=dict(range=[0.5, 1.02]), yaxis=dict(range=[0.5, 1.02]))
+fig.show()
+```
+
+---
+
+*📝 Not: Bu rapor Quarto ve Pathologic modülleri tarafından otomatik olarak üretilmiştir.*
