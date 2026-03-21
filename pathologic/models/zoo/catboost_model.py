@@ -56,6 +56,7 @@ class CatBoostWrapper:
                 "random_strength": float(random_strength),
                 "random_seed": random_state,
                 "logging_level": "Silent",
+                "thread_count": -1,  # MAC_OPTIMIZATION: İşlemcinin tüm çekirdeklerini kullanmaya zorla
             }
             if bootstrap_type is not None:
                 common_params["bootstrap_type"] = str(bootstrap_type)

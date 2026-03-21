@@ -63,6 +63,7 @@ class XGBoostWrapper:
                 "reg_alpha": float(reg_alpha),
                 "reg_lambda": float(reg_lambda),
                 "random_state": random_state,
+                "n_jobs": -1,  # MAC_OPTIMIZATION: İşlemcinin tüm çekirdeklerini kullanmaya zorla
             }
             if scale_pos_weight is not None:
                 common_params["scale_pos_weight"] = float(scale_pos_weight)

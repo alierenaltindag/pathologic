@@ -149,6 +149,7 @@ class Tuner:
                 wrapped_optuna_objective,
                 n_trials=n_trials,
                 timeout=timeout_seconds,
+                n_jobs=2,  # MAC_OPTIMIZATION: Aynı anda 2 farklı modeli paralel test ederek süreyi yarıya indirir.
             )
 
         best = study.best_trial
