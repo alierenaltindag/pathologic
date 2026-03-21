@@ -1,0 +1,11 @@
+# Test/değerlendirme davranışlarını kontrol eder.
+# Bu dosya defaults.yaml içinden test alt bloğu olarak yüklenir.
+
+# Testte batch boyutu.
+batch_size: 256
+
+# Olasılık eşiği.
+threshold: 0.5
+
+# Raporlanacak temel metrikler.
+metrics: [roc_auc, f1, precision, recall]

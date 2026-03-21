@@ -1,0 +1,26 @@
+c: 0.5
+max_iter: 1200
+solver: lbfgs
+tol: 0.0001
+fit_intercept: true
+class_weight: balanced
+
+tuning_search_space:
+  c:
+    type: float
+    low: 0.01
+    high: 20.0
+    log: true
+  max_iter:
+    type: int
+    low: 600
+    high: 2400
+    step: 300
+  solver:
+    type: categorical
+    values: [lbfgs, newton-cg, saga]
+  tol:
+    type: float
+    low: 0.00001
+    high: 0.001
+    log: true

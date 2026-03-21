@@ -1,0 +1,27 @@
+# Faz 6 explainability varsayilanlari.
+backend: auto
+background_size: 100
+top_k_features: 5
+top_k_samples: 10
+
+# Model hata analizi raporu icin grup kolonu adaylari.
+group_columns:
+  - gene_id
+  - domain_id
+  - protein_family
+
+# Teknik feature adlari -> biyolojik etiket map'i.
+biological_mapping: {}
+
+false_positive:
+  enabled: true
+  top_k_hotspots: 10
+  minimum_negative_count: 1
+  group_columns:
+    - gene_id
+    - domain_id
+    - protein_family
+
+visual_report:
+  enabled: true
+  save_path: null

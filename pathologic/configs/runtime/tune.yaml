@@ -1,0 +1,28 @@
+# Hyperparameter optimization (HPO) ayarları.
+# Bu dosya defaults.yaml içinden tune alt bloğu olarak yüklenir.
+
+# HPO motoru. [grid/random/optuna]
+engine: random
+
+# Toplam deneme sayısı.
+n_trials: 20
+
+# Budget kontrolu icin ust deneme limiti.
+max_trials: 20
+
+# Optimizasyon hedef metriği.
+objective: roc_auc
+
+# Zaman limiti (dakika).
+timeout_minutes: 60
+
+# Tuning erken durdurma kontrolu.
+early_stopping:
+  enabled: false
+  patience: 5
+  min_improvement: 0.0
+
+class_imbalance:
+  enabled: false
+  mode: balanced
+  positive_class_weight:

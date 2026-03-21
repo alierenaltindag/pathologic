@@ -1,0 +1,90 @@
+# Eğitim hiperparametrelerinin temel varsayılanlarını içerir.
+# Bu dosya defaults.yaml içinden train alt bloğu olarak yüklenir.
+
+epochs: 30
+batch_size: 64
+validation_split: 0.2
+mixed_precision: false
+
+# Terminal gorunurluk ayarlari.
+ui:
+  # Renkli ciktiyi etkinlestirir.
+  colored_output: true
+  # Epoch/trial progress bar gosterimini etkinlestirir.
+  show_progress: true
+  # Batch-level progress bar gosterimini etkinlestirir.
+  show_batch_progress: false
+
+# Eğitim/validasyon bölme stratejisi ayarlarını içerir.
+split:
+  # Bölme modu: cross_validation veya holdout.
+  mode: cross_validation
+  # Cross-validation modu parametreleri.
+  cross_validation:
+    # Kaç fold üretileceğini belirtir.
+    n_splits: 3
+    # Sınıf dağılımını mümkün olduğunca koruyan stratified bölmeyi etkinleştirir.
+    stratified: true
+  # Holdout modu parametreleri (train/val/test).
+  holdout:
+    # Test için ayrılacak oran.
+    test_size: 0.2
+    # Validation için ayrılacak oran.
+    val_size: 0.2
+    # Holdout bölmede sınıf dağılımını korumayı dener.
+    stratified: true
+
+# Ön işleme adımlarının varsayılan davranışını belirler.
+preprocess:
+  # Eksik deger stratejisi. [impute/drop_rows]
+  # impute: impute_strategy ile doldurur.
+  # drop_rows: sayisal ozelliklerde eksik olan satirlari dusurur.
+  missing_value_policy: drop_rows
+  # Eksik değer doldurma yöntemi. [none/mean/median/most_frequent]
+  # none: eksik değerleri olduğu gibi bırakır.
+  impute_strategy: median
+  # Sayısal özelliklerin hangi ölçekleme yöntemiyle dönüştürüleceğini belirtir.
+  scaler: standard
+  # Gen bazlı normalizasyonu etkinleştirir.
+  per_gene: true
+  # per_gene=true iken gene kolonu yoksa davranış. [disable/error]
+  on_missing_gene_column: disable
+  # Orijinalde eksik olan degerler icin ikili indicator feature uretir.
+  add_missing_indicators: false
+  # Indicator uretimi icin ozellik alt kumesi. null ise tum sayisal ozellikler.
+  missing_indicator_features:
+
+early_stopping:
+  enabled: false
+  patience: 10
+  min_delta: 0.0
+  validation_split: 0.2
+  restore_best_weights: true
+
+class_imbalance:
+  enabled: false
+  mode: balanced
+  # Opsiyonel: pozitif sinif agirligini sabitlemek icin kullanilir.
+  positive_class_weight:
+
+# Global optimizer varsayılanları (model bazında override edilebilir).
+optimizer:
+  name: adam
+  lr: 0.001
+  weight_decay: 0.0
+
+# Global scheduler varsayılanları (model bazında override edilebilir).
+scheduler:
+  name: none
+
+# Egitimde kullanilacak GPU id listesi (ornek: [0] veya [0,1]).
+gpu_ids: []
+
+# DistributedDataParallel ayarlari (tek node cok process).
+ddp:
+  enabled: false
+  backend: nccl
+  rank: 0
+  world_size: 1
+  # DDP icin istege bagli GPU id listesi (train.gpu_ids yoksa kullanilir).
+  gpu_ids: []

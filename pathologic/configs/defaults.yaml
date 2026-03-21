@@ -1,0 +1,189 @@
+# Kullanılacak varsayılan model kombinasyonunu belirtir.
+# [xgboost, catboost, mlp, tabnet, random_forest, hist_gbdt, logreg]
+model: xgboost
+# Deneylerin tekrar üretilebilir olması için sabit rastgelelik seed'ini tanımlar.
+seed: 42
+# Cihaz seçimini otomatik yapar (uygunsa CUDA, sonra MPS, değilse CPU). [auto/cuda/mps/cpu]
+device: auto
+
+# Donanım davranışını merkezi olarak tanımlar.
+hardware:
+  # Donanım öncelik sıralaması (ilk uygun olan seçilir).
+  priority: [cuda, mps, cpu]
+  # Mixed precision kullanımını açıp kapatır.
+  mixed_precision: false
+
+# Log davranışlarını ve seviyelerini kontrol eder.
+logging:
+  # Varsayılan log seviyesi. [DEBUG/INFO/WARNING/ERROR]
+  level: INFO
+  # Konsol çıktısında fallback uyarılarını görünür tutar.
+  fallback_warnings: true
+
+# Terminal cikti gorunurlugu ayarlari.
+ui:
+  # Renkli ciktiyi etkinlestirir.
+  colored_output: true
+  # Epoch/trial progress bar gosterimini etkinlestirir.
+  show_progress: true
+  # Batch-level progress bar gosterimini etkinlestirir.
+  show_batch_progress: false
+
+# Search script ve hibrit aday olusturma varsayimlarini tanimlar.
+search:
+  # Cift model adaylari icin varsayilan hibrit strateji.
+  # Alternatifler: [soft_voting, hard_voting, stacking, blending]
+  hybrid_strategy: soft_voting
+  # Hibrit voting agirlik politikasi. [auto/manual/equal/inverse_error/objective_proportional]
+  hybrid_weighting_policy: auto
+  # Dinamik agirlik hesabinda kullanilan hedef metrik.
+  hybrid_weighting_objective: f1
+  # Verilen/member bazli agirliklarin normalize edilip edilmeyecegi.
+  hybrid_normalize_weights: true
+  # Stacking ve blending icin varsayilan meta model alias'i.
+  # Alternatifler: [logreg, random_forest, xgboost]
+  hybrid_meta_model: logreg
+  # Stacking icin default CV fold sayisi.
+  hybrid_stacking_cv: 3
+  # Blending icin holdout orani.
+  hybrid_blend_size: 0.2
+  # Hibrit strateji ve stratejiye ozel parametre tuning alanini aktif eder.
+  # true oldugunda strategy + meta_model_alias da HPO/NAS aramasina dahil edilir.
+  hybrid_tune_strategy_and_params: true
+  # Regularization arama uzayi davranisi. [auto/off]
+  # auto: uygun modellere regularization parametreleri eklenir.
+  # off: regularization parametreleri search space'den cikarilir.
+  regularization_profile: auto
+  # Regularization optimizasyonuna dahil edilecek model alias listesi.
+  regularization_models: [xgboost, lightgbm, catboost, tabnet, mlp]
+  # NAS asamasinda regularization parametrelerini optimize etmeyi ac/kapa.
+  # Varsayilan false: regularization once HPO/Tuning ile optimize edilir.
+  optimize_regularization_in_nas: false
+  # Butce profiline gore hibrit tuning araliklarini belirler.
+  hybrid_tuning_space:
+    quick:
+      strategy: [soft_voting, hard_voting]
+      weighting_policy: [auto, manual, equal, objective_proportional]
+      meta_model_alias: [logreg]
+      weight_ratio:
+        low: 0.35
+        high: 0.65
+      cv:
+        low: 2
+        high: 3
+      blend_size:
+        low: 0.15
+        high: 0.25
+    balanced:
+      strategy: [soft_voting, hard_voting, stacking, blending]
+      weighting_policy:
+        [auto, manual, equal, inverse_error, objective_proportional]
+      meta_model_alias: [logreg, random_forest]
+      weight_ratio:
+        low: 0.2
+        high: 0.8
+      cv:
+        low: 2
+        high: 4
+      blend_size:
+        low: 0.1
+        high: 0.3
+    aggressive:
+      strategy: [soft_voting, hard_voting, stacking, blending]
+      weighting_policy:
+        [auto, manual, equal, inverse_error, objective_proportional]
+      meta_model_alias: [logreg, random_forest, xgboost]
+      weight_ratio:
+        low: 0.1
+        high: 0.9
+      cv:
+        low: 2
+        high: 5
+      blend_size:
+        low: 0.1
+        high: 0.35
+  # Aday bazli aciklanabilirlik maliyet kontrolu.
+  explainability:
+    top_k_features: 5
+    top_k_samples: 10
+    background_size: 100
+    fp_top_k: 10
+    fp_min_negative_count: 1
+  # Search asamasinda cok boyutlu hata analizi davranisi.
+  error_analysis_mode: hybrid
+
+# Veri şeması ve zorunlu alanlarla ilgili ayarları içerir.
+data:
+  # Hedef etiket sütununun adını belirtir.
+  label_column: label
+  # Gen kimliğini tutan ve group-based split için kullanılan sütunu belirtir.
+  gene_column: gene_id
+  # Model eğitimi öncesinde veri setinde bulunması zorunlu özellikleri listeler.
+  required_features:
+    # Birinci zorunlu örnek özellik adını belirtir.
+    - feat_a
+    # İkinci zorunlu örnek özellik adını belirtir.
+    - feat_b
+  # Model/member bazli feature yonlendirme (opsiyonel).
+  # single: tek model alias -> feature listesi
+  # hybrid: hibrit alias -> members -> alias -> feature listesi
+  feature_routing:
+    single: {}
+    hybrid: {}
+  # data.csv tabanli ornekler (bilgilendirme amacli, runtime'da okunmaz).
+  # Not: Search script prepared dataset urettiginde feature adlari `feature__`
+  # prefix'i alir. Ornekler bu formatla yazilmistir.
+  feature_routing_examples:
+    single:
+      logreg:
+        - feature__REVEL_Score
+        - feature__cadd.phred
+        - feature__gnomAD_AF
+    hybrid:
+      catboost+logreg:
+        members:
+          catboost:
+            - feature__Protein_change
+            - feature__Ref_AA
+            - feature__Alt_AA
+            - feature__AA_Position
+            - feature__BLOSUM_Score
+          logreg:
+            - feature__REVEL_Score
+            - feature__cadd.phred
+            - feature__gnomAD_AF
+            - feature__GERP_Score
+            - feature__dbnsfp.sift.score
+
+  # Bu listedeki sutunlar pipeline boyunca hic kullanilmaz ve filtrelenir.
+  excluded_columns:
+    - VariationID
+    - Veri_Kaynagi_Paneli
+    - AA_Position
+
+  # Egitimde feature olarak kullanilmayan ancak hata analizinde
+  # group bazli raporlama icin korunacak alanlar.
+  error_analysis_columns:
+    - Veri_Kaynagi_Paneli
+    - Protein change
+    - Gene(s)
+
+# Eğitim/test/tune ayarları modüler dosyalardan yüklenir.
+train: runtime/train.yaml
+test: runtime/test.yaml
+tune: runtime/tune.yaml
+explain: runtime/explain.yaml
+finetune: runtime/finetune.yaml
+
+# Model bazlı parametreleri alias anahtarları altında toplar.
+models:
+  # MLP model varsayılanları doğrudan mimari dosyasından yüklenir.
+  mlp: mlp_architecture.yaml
+  # Model başına ayrı defaults dosyaları.
+  xgboost: models/xgboost.yaml
+  lightgbm: models/lightgbm.yaml
+  catboost: models/catboost.yaml
+  tabnet: models/tabnet.yaml
+  random_forest: models/random_forest.yaml
+  hist_gbdt: models/hist_gbdt.yaml
+  logreg: models/logreg.yaml

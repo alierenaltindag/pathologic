@@ -1,0 +1,121 @@
+# ============================================================================
+# TabNet Model Config Guide
+# ============================================================================
+# Bu dosya `tabnet` alias'i icin varsayilan parametreleri tanimlar.
+#
+# Desteklenen alanlar (TabNetWrapper.__init__):
+# - max_epochs: int
+#   Native TabNet backend kullaniliyorsa azami epoch.
+#
+# - patience: int
+#   Native TabNet backend icin erken durdurma sabri.
+#
+# - learning_rate: float
+#   Optimizer ogrenme orani.
+#
+# - weight_decay: float
+#   Optimizer L2 regularization agirligi.
+#
+# - optimizer_name: str
+#   [adam/adamw/sgd/rmsprop]
+#
+# - scheduler_name: str
+#   [none/step/cosine]
+#
+# - n_d, n_a, n_steps, gamma, lambda_sparse, mask_type
+#   Native TabNet mimari/regularization parametreleri.
+#
+# - batch_size, virtual_batch_size
+#   Native TabNet fit parametreleri.
+#
+# - fallback_hidden_layer_sizes: [int, ...]
+#   `pytorch-tabnet` kurulu degilse kullanilan MLP fallback katmanlari.
+#
+# - fallback_max_iter: int
+#   MLP fallback max_iter degeri.
+#
+# - random_state: int
+#   Tekrarlanabilirlik seed.
+#
+# Not:
+# - `pytorch-tabnet` kurulu degilse wrapper fallback MLP'ye gecer.
+
+max_epochs: 60
+patience: 15
+learning_rate: 0.015
+weight_decay: 0.0001
+optimizer_name: adam
+scheduler_name: cosine
+scheduler_patience: 5
+scheduler_factor: 0.5
+scheduler_step_size: 10
+scheduler_gamma: 0.9
+n_d: 16
+n_a: 16
+n_steps: 4
+gamma: 1.5
+lambda_sparse: 0.001
+mask_type: sparsemax
+batch_size: 1024
+virtual_batch_size: 128
+fallback_hidden_layer_sizes: [64, 32]
+fallback_max_iter: 400
+
+tuning_search_space:
+  max_epochs:
+    type: int
+    low: 40
+    high: 100
+    step: 10
+  patience:
+    type: int
+    low: 5
+    high: 20
+    step: 5
+  learning_rate:
+    type: float
+    low: 0.003
+    high: 0.05
+    log: true
+  weight_decay:
+    type: float
+    low: 0.000001
+    high: 0.001
+    log: true
+  n_d:
+    type: int
+    low: 8
+    high: 48
+    step: 8
+  n_a:
+    type: int
+    low: 8
+    high: 48
+    step: 8
+  n_steps:
+    type: int
+    low: 3
+    high: 6
+    step: 1
+  gamma:
+    type: float
+    low: 1.0
+    high: 2.0
+    step: 0.1
+  lambda_sparse:
+    type: float
+    low: 0.000001
+    high: 0.01
+    log: true
+  batch_size:
+    type: categorical
+    values: [256, 512, 1024]
+  virtual_batch_size:
+    type: categorical
+    values: [64, 128, 256]
+  optimizer_name:
+    type: categorical
+    values: [adam, adamw]
+  scheduler_name:
+    type: categorical
+    values: [none, step, cosine]

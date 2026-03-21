@@ -1,0 +1,114 @@
+# ============================================================================
+# MLP Architecture Config Reference
+# ============================================================================
+# Bu dosya, MLP mimarisini ve egitim ayarlarini dinamik olarak tanimlar.
+#
+# Desteklenen layer tipleri (model.architecture.layers):
+#
+# 1) dense
+#    Zorunlu alanlar:
+#      - type: dense
+#      - units: int (pozitif)
+#    Opsiyonel alanlar:
+#      - activation: relu | tanh | gelu | sigmoid | identity
+#
+# 2) batch_norm
+#    Zorunlu alanlar:
+#      - type: batch_norm
+#    Opsiyonel alanlar:
+#      - features: [feature_name, ...]
+#        Not: features verilirse preprocess tarafinda scaler_features hint'i
+#        olusur. Verilmezse model katmani olarak BatchNorm1d kullanilir.
+#
+# 3) gene_batch_norm
+#    Zorunlu alanlar:
+#      - type: gene_batch_norm
+#      - features: [feature_name, ...]
+#    Not:
+#      - Bu layer preprocess hint olarak yorumlanir.
+#      - per_gene=true ve per_gene_features=[...] akisini tetikler.
+#
+# 4) dropout
+#    Zorunlu alanlar:
+#      - type: dropout
+#    Opsiyonel alanlar:
+#      - p: float (0 <= p < 1), varsayilan 0.2
+#      - prob: float (p ile ayni amacla alternatif anahtar)
+#
+# Diger model alanlari:
+#   - activation: layer bazinda override yoksa varsayilan aktivasyon
+#   - max_epochs: egitim epoch sayisi
+#   - batch_size: egitim batch boyutu
+#   - learning_rate_init: baslangic ogrenme orani
+#   - optimizer:
+#       - name: adam | adamw | sgd
+#       - lr: float
+#       - weight_decay: float
+#   - scheduler:
+#       - name: none | StepLR | CosineAnnealingLR | ExponentialLR
+#       - StepLR: step_size (int), gamma (float)
+#       - CosineAnnealingLR: t_max (int), eta_min (float)
+#       - ExponentialLR: gamma (float)
+
+# ============================================================================
+# MLP mimarisini dinamik tanimlamak icin ayrik model konfigurasyonu.
+# Mimari, optimizer ve scheduler ayni dosyadan degistirilebilir.
+version: 1
+model:
+  type: mlp
+  architecture:
+    layers:
+      - type: dense
+        units: 96
+        activation: relu
+      - type: batch_norm
+      - type: dropout
+        p: 0.25
+      - type: dense
+        units: 48
+        activation: relu
+      - type: dropout
+        p: 0.2
+      - type: gene_batch_norm
+        features: [feat_a]
+
+  # Varsayilan aktivasyon (layer bazinda override edilebilir).
+  activation: relu
+  # Eğitim hiperparametreleri.
+  max_epochs: 80
+  batch_size: 32
+  learning_rate_init: 0.001
+  alpha: 0.0005
+
+  # Optimizer konfigurasyonu.
+  optimizer:
+    name: adamw
+    lr: 0.001
+    weight_decay: 0.0001
+
+  # Learning-rate scheduler konfigurasyonu.
+  scheduler:
+    name: CosineAnnealingLR
+    t_max: 40
+    eta_min: 0.00001
+
+  # Tuning arama uzayi.
+  tuning_search_space:
+    learning_rate_init:
+      type: float
+      low: 0.0001
+      high: 0.01
+      log: true
+    batch_size:
+      type: categorical
+      values: [16, 32, 64]
+    alpha:
+      type: float
+      low: 0.000001
+      high: 0.01
+      log: true
+    max_epochs:
+      type: int
+      low: 40
+      high: 160
+      step: 10

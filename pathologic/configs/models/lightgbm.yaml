@@ -1,0 +1,93 @@
+# ============================================================================
+# LightGBM Model Config Guide
+# ============================================================================
+# This file defines the default parameters for the `lightgbm` alias.
+#
+# Supported Parameters (LightGBMWrapper.__init__):
+# - n_estimators: int
+#   The number of boosting iterations (trees).
+#   Range: 100 - 1500
+#
+# - num_leaves: int
+#   Maximum number of leaves in one tree.
+#   Range: 20 - 150
+#
+# - learning_rate: float
+#   Step size for shrinkage.
+#   Range: 0.01 - 0.3
+#
+# - max_depth: int
+#   Maximum depth of the tree. -1 for no limit.
+#   Range: 3 - 12
+#
+# - min_child_samples: int
+#   The minimum number of data in one leaf.
+#   Range: 10 - 50
+#
+# - random_state: int
+#   Seed for reproducibility.
+
+n_estimators: 300
+num_leaves: 31
+learning_rate: 0.05
+max_depth: -1
+min_child_samples: 20
+subsample: 0.8
+colsample_bytree: 0.8
+reg_alpha: 0.0001
+reg_lambda: 1.0
+scale_pos_weight: 1.0
+class_weight:
+importance_type: "split"
+
+early_stopping:
+  enabled: true
+  validation_split: 0.2
+  patience: 30
+
+tuning_search_space:
+  n_estimators:
+    type: int
+    low: 150
+    high: 850
+    step: 50
+  num_leaves:
+    type: int
+    low: 20
+    high: 60
+    step: 5
+  learning_rate:
+    type: float
+    low: 0.01
+    high: 0.15
+    log: true
+  max_depth:
+    type: int
+    low: 3
+    high: 10
+    step: 1
+  min_child_samples:
+    type: int
+    low: 5
+    high: 50
+    step: 5
+  subsample:
+    type: float
+    low: 0.6
+    high: 1.0
+    step: 0.1
+  colsample_bytree:
+    type: float
+    low: 0.6
+    high: 1.0
+    step: 0.1
+  reg_alpha:
+    type: float
+    low: 1e-05
+    high: 1.0
+    log: true
+  reg_lambda:
+    type: float
+    low: 0.1
+    high: 10.0
+    log: true

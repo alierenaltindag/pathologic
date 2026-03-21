@@ -1,0 +1,32 @@
+n_estimators: 400
+max_depth: 16
+min_samples_split: 4
+min_samples_leaf: 2
+max_features: sqrt
+class_weight:
+n_jobs: -1
+
+tuning_search_space:
+  n_estimators:
+    type: int
+    low: 200
+    high: 800
+    step: 100
+  max_depth:
+    type: int
+    low: 8
+    high: 24
+    step: 4
+  min_samples_split:
+    type: int
+    low: 2
+    high: 12
+    step: 2
+  min_samples_leaf:
+    type: int
+    low: 1
+    high: 6
+    step: 1
+  max_features:
+    type: categorical
+    values: [sqrt, log2, null]

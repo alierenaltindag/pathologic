@@ -1,0 +1,36 @@
+# Fine-tuning runtime varsayilanlari.
+# Bu dosya defaults.yaml icinden finetune alt bloğu olarak yuklenir.
+
+# Fine-tune tekrar uretilebilirligi icin sabit seed.
+seed: 42
+
+# Fine-tune epoch sayisi.
+epochs: 10
+
+# Fine-tune batch boyutu (model destekliyorsa).
+batch_size: 64
+
+# Fine-tune ogrenme orani override degeri.
+learning_rate: 0.0005
+
+# Layer-freezing stratejisi.
+# none: tum katmanlar egitilebilir
+# backbone_last2: backbone freeze + son iki linear katman egitilebilir
+freeze_layers: backbone_last2
+
+# Fine-tune val split (erken durdurma/scheduler metrigi icin).
+validation_split: 0.2
+
+# Fine-tune scheduler varsayilanlari.
+scheduler:
+  name: reduce_on_plateau
+  mode: min
+  factor: 0.5
+  patience: 3
+  threshold: 0.0001
+  min_lr: 0.000001
+
+# Fine-tune metrik delta raporu ayarlari.
+metric_delta:
+  enabled: true
+  metrics: [roc_auc, f1]

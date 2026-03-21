@@ -1,0 +1,95 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pathologic"
+version = "0.1.0"
+description = "Configurable, explainable pathogenicity prediction framework"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "PathoLogic Team" }]
+license = { text = "MIT" }
+keywords = ["genomics", "pathogenicity", "machine-learning", "explainability"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "betacal>=1.1.0",
+    "catboost>=1.2.5",
+    "matplotlib>=3.9.0",
+    "numpy>=2.0.0",
+    "optuna>=3.6.1",
+    "pandas>=2.2.0",
+    "pyarrow>=17.0.0",
+    "PyYAML>=6.0.1",
+    "pytorch-tabnet>=4.1.0",
+    "scipy>=1.13.0",
+    "scikit-learn>=1.5.0",
+    "seaborn>=0.13.2",
+    "shap>=0.46.0",
+    "tqdm>=4.66.0",
+    "torch==2.10.0",
+    "umap-learn>=0.5.6",
+    "xgboost>=2.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/alierenaltindag/pathologic"
+Repository = "https://github.com/alierenaltindag/pathologic"
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.11.0",
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.6.0",
+    "types-PyYAML>=6.0.12",
+]
+training = []
+
+models = []
+parquet = []
+all = []
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pathologic*"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "integration: marks integration tests across phases",
+    "smoke: marks smoke tests (quick sanity checks)",
+    "regression: marks regression tests",
+    "rc: marks release-candidate gate tests",
+    "slow: marks tests that take longer to run",
+    "benchmark: marks performance benchmark tests",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+ignore_missing_imports = true
+files = ["pathologic"]
