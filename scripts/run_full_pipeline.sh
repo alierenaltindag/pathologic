@@ -76,11 +76,18 @@ else
 fi
 
 # Execute Quarto with the found binary
-export QUARTO_PYTHON=$(which python)
+export QUARTO_PYTHON="$(pwd)/.venv/bin/python"
+if [ ! -f "$QUARTO_PYTHON" ]; then
+    export QUARTO_PYTHON=$(which python)
+fi
 CURRENT_TIME=$(date "+%Y-%m-%d %H:%M:%S")
+FILE_TIME=$(date "+%Y-%m-%d_%H-%M-%S")
 HOSTNAME=$(hostname)
 
+REPORT_FILENAME="${FILE_TIME}_${HOSTNAME}.html"
+
 $QUARTO_BIN render reports/model_performance_report.qmd \
+    --output "$REPORT_FILENAME" \
     -P csv_path:"$RELATIVE_CSV_PATH" \
     -P run_profile:"$BUDGET" \
     -P run_machine:"$HOSTNAME" \
@@ -89,5 +96,5 @@ $QUARTO_BIN render reports/model_performance_report.qmd \
 echo ""
 echo "=========================================================="
 echo "✅ Pipeline Completed Successfully!"
-echo "📊 Your dynamic report is ready at: reports/model_performance_report.html"
+echo "📊 Your dynamic report is ready at: reports/$REPORT_FILENAME"
 echo "=========================================================="

@@ -23,20 +23,23 @@ params:
 Bu rapor, farklı makine öğrenmesi modelleri ve hiperparametre optimizasyonu (HPO) stratejileriyle elde edilen sonuçları karşılaştırmaktadır. Değerlendirme, test veri seti üzerindeki temel sınıflandırma metriklerine (F1, Precision, Recall, ROC AUC) dayanmaktadır.
 
 ```{python}
-#| label: setup
+#| label: parameters
 #| tags: [parameters]
+#| include: false
+csv_path = "../results/model_search/search_20260321_160620/leaderboard_summary.csv"
+run_profile = "Bilinmiyor"
+run_machine = "Bilinmeyen Makine"
+run_time = "Bilinmiyor"
+```
+
+```{python}
+#| label: setup
 #| include: false
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from IPython.display import Markdown, display
 import datetime
-
-# Varsayılan değerler (Quarto papermill ile bunları ezecek)
-csv_path = "../results/model_search/search_20260321_160620/leaderboard_summary.csv"
-run_profile = "Bilinmiyor"
-run_machine = "Bilinmeyen Makine"
-run_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 # Veriyi Yükle
 df = pd.read_csv(csv_path)
@@ -45,6 +48,9 @@ df = pd.read_csv(csv_path)
 # Skoru yüksekten düşüğe doğru sıralıyoruz (varsayılan metrik F1)
 if 'test_f1' in df.columns:
     df = df.sort_values(by="test_f1", ascending=False)
+    
+# Grafikler için başarısız olan (NaN içeren) satırları temizleyelim
+plot_df = df.dropna(subset=['test_f1', 'test_precision', 'test_recall', 'test_roc_auc']).copy()
 ```
 
 ## Çalıştırma Bilgileri
@@ -82,7 +88,7 @@ num_cols = display_df.select_dtypes(include=['float64']).columns
 display_df[num_cols] = display_df[num_cols].round(4)
 
 # Pandas Styler ile renklendirme (Hücre içi arka plan renkleri)
-styler = display_df.style.background_gradient(cmap='Blues', subset=[c for c in num_cols if 'test_' in c])
+styler = display_df.style.format(na_rep='-').background_gradient(cmap='Blues', subset=[c for c in num_cols if 'test_' in c])
 styler
 ```
 
@@ -94,7 +100,7 @@ styler
 #| fig-cap: "Aday Modellerin Test F1 Skorları"
 
 fig = px.bar(
-    df, 
+    plot_df, 
     x="candidate", 
     y="test_f1", 
     color="kind",
@@ -104,7 +110,7 @@ fig = px.bar(
     color_discrete_sequence=px.colors.qualitative.Pastel
 )
 fig.update_traces(texttemplate='%{text:.3f}', textposition='outside')
-fig.update_layout(yaxis=dict(range=[min(df['test_f1'])*0.9, max(df['test_f1'])*1.05]))
+fig.update_layout(yaxis=dict(range=[min(plot_df['test_f1'])*0.9, max(plot_df['test_f1'])*1.05]))
 fig.show()
 ```
 
@@ -115,7 +121,7 @@ Aşağıdaki Radar Grafiği, en iyi 5 modelin dört farklı metrikte (F1, Precis
 #| label: fig-radar
 #| fig-cap: "En İyi 5 Modelin Çoklu Metrik Profilleri"
 
-top_models = df.head(5)
+top_models = plot_df.head(5)
 metrics = ['test_f1', 'test_precision', 'test_recall', 'test_roc_auc']
 
 fig = go.Figure()
@@ -150,7 +156,7 @@ Sağ üst köşeye (1.0, 1.0) en yakın olan modeller "Mükemmel" modellerdir.
 #| fig-cap: "Hassasiyet (Precision) ve Duyarlılık (Recall) İlişkisi"
 
 fig = px.scatter(
-    df, 
+    plot_df, 
     x="test_recall", 
     y="test_precision", 
     color="candidate", 
