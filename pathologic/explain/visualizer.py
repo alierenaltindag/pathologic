@@ -257,6 +257,12 @@ class ExplainabilityVisualizer:
                 continue
             status = escape(str(payload.get("status", "unknown")))
             backend = escape(str(payload.get("backend", "unknown")))
+            diagnostics_value = payload.get("attribution_diagnostics")
+            diagnostics_text = (
+                f"<div><strong>attribution_diagnostics:</strong> {escape(str(diagnostics_value))}</div>"
+                if isinstance(diagnostics_value, dict) and diagnostics_value
+                else ""
+            )
             weight_value = payload.get("weight")
             weight_text = (
                 f"<div><strong>weight:</strong> {float(weight_value):.4f}</div>"
@@ -289,6 +295,7 @@ class ExplainabilityVisualizer:
                 f"<h3>{escape(str(alias))}</h3>"
                 f"<div><strong>status:</strong> {status}</div>"
                 f"<div><strong>backend:</strong> {backend}</div>"
+                f"{diagnostics_text}"
                 f"{weight_text}"
                 f"{score_text}"
                 "<table><thead><tr><th>feature</th><th>abs_contribution</th><th>biological_label</th></tr></thead><tbody>"

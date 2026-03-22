@@ -233,6 +233,7 @@ def test_visualizer_renders_member_explainability_section() -> None:
                 "tabnet": {
                     "status": "ok",
                     "backend": "proxy",
+                    "attribution_diagnostics": {"fallback_reason": "synthetic"},
                     "global_feature_importance": [
                         {
                             "feature": "revel_score",
@@ -250,6 +251,7 @@ def test_visualizer_renders_member_explainability_section() -> None:
     assert "Member Explainability" in html
     assert "tabnet" in html
     assert "backend:" in html
+    assert "attribution_diagnostics:" in html
 
 
 def test_service_builds_member_explainability_for_hybrid_model() -> None:
@@ -309,4 +311,5 @@ def test_service_builds_member_explainability_for_hybrid_model() -> None:
     assert abs(float(members["tabnet"]["weight"]) - 0.6) < 1e-6
     assert abs(float(members["xgboost"]["weight"]) - 0.4) < 1e-6
     assert "effective_member_weights" in payload["metadata"]
+    assert "member_weight_scores" in payload["metadata"]
 

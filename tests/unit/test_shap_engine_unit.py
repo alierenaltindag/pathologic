@@ -48,6 +48,48 @@ class _HybridEnsembleWrapper:
         return np.column_stack([1.0 - probs, probs])
 
 
+class _TabNetEstimatorLike:
+    __module__ = "pytorch_tabnet.tab_model"
+
+    def predict_proba(self, x: np.ndarray) -> np.ndarray:
+        logits = x.sum(axis=1)
+        probs = 1.0 / (1.0 + np.exp(-logits))
+        return np.column_stack([1.0 - probs, probs])
+
+
+class _TabNetWrapperLike:
+    def __init__(self, *, native: bool = True) -> None:
+        self._is_native_tabnet = native
+        self.estimator = _TabNetEstimatorLike()
+
+    def predict_proba(self, x: np.ndarray) -> np.ndarray:
+        return self.estimator.predict_proba(x)
+
+
+class _TorchLeaf:
+    def parameters(self):
+        return iter([1.0])
+
+    def eval(self) -> None:
+        return None
+
+
+class _NestedTorchWrapper:
+    def __init__(self) -> None:
+        self.network = _TorchLeaf()
+
+
+class _TupleParamTorchLeaf:
+    def parameters(self):
+        class _Param:
+            device = "cpu"
+
+        return iter([("w", _Param())])
+
+    def eval(self) -> None:
+        return None
+
+
 def test_shap_engine_auto_backend_selection_by_model_type() -> None:
     engine = ShapAttributionEngine(backend="auto", random_state=42)
 
@@ -56,6 +98,7 @@ def test_shap_engine_auto_backend_selection_by_model_type() -> None:
     assert engine._select_backend(_DummyProbModel()) == "shap"
     assert engine._select_backend(_HybridLikeWrapper()) == "shap"
     assert engine._select_backend(_HybridEnsembleWrapper()) == "proxy"
+    assert engine._select_backend(_TabNetWrapperLike()) == "deep"
 
 
 def test_shap_engine_proxy_is_deterministic_for_same_seed() -> None:
@@ -116,4 +159,38 @@ def test_shap_engine_explicit_backend_raises_with_reason(
     x_target = np.array([[0.15, 0.25]], dtype=float)
 
     with pytest.raises(RuntimeError, match="shap unavailable"):
+        engine.compute(model=model, x_background=x_background, x_target=x_target)
+
+
+def test_shap_engine_resolve_torch_model_from_nested_attributes() -> None:
+    engine = ShapAttributionEngine(backend="auto", random_state=42)
+    model = _NestedTorchWrapper()
+
+    torch_model = engine._resolve_torch_model(model)
+
+    assert torch_model is not None
+    assert hasattr(torch_model, "parameters")
+
+
+def test_shap_engine_resolve_first_parameter_tensor_supports_tuple_style() -> None:
+    engine = ShapAttributionEngine(backend="auto", random_state=42)
+
+    first_param = engine._resolve_first_parameter_tensor(_TupleParamTorchLeaf())
+
+    assert first_param is not None
+    assert hasattr(first_param, "device")
+
+
+def test_tabnet_deep_shap_failure_raises_in_auto_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = ShapAttributionEngine(backend="auto", random_state=42)
+    model = _TabNetWrapperLike(native=True)
+
+    monkeypatch.setattr(engine, "_try_shap", lambda **_: (None, "torch_model_unavailable"))
+
+    x_background = np.array([[0.1, 0.2], [0.2, 0.1]], dtype=float)
+    x_target = np.array([[0.15, 0.25]], dtype=float)
+
+    with pytest.raises(RuntimeError, match="DeepSHAP is required for TabNet"):
         engine.compute(model=model, x_background=x_background, x_target=x_target)

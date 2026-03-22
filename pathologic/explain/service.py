@@ -109,6 +109,12 @@ class ExplainabilityService:
                     str(alias): float(value)
                     for alias, value in member_weights.items()
                 }
+            member_weight_scores = member_explainability.get("member_weight_scores")
+            if isinstance(member_weight_scores, dict):
+                metadata["member_weight_scores"] = {
+                    str(alias): float(value)
+                    for alias, value in member_weight_scores.items()
+                }
 
         return ExplainabilityReport(
             backend=attribution.backend,

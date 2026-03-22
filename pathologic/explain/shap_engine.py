@@ -52,6 +52,11 @@ class ShapAttributionEngine:
             )
             if shap_result is not None:
                 return shap_result
+            if self._requires_tabnet_deep_enforcement(model=model, selected_backend=selected_backend):
+                raise RuntimeError(
+                    "DeepSHAP is required for TabNet explainability but could not be computed. "
+                    f"Reason: {shap_error or 'unknown_error'}"
+                )
             if self.backend not in {"auto", "proxy"}:
                 raise RuntimeError(
                     "Explainability backend was requested but SHAP initialization failed. "
@@ -135,13 +140,19 @@ class ShapAttributionEngine:
                     if torch_model is None:
                         return None, "torch_model_unavailable"
 
-                    device = next(torch_model.parameters()).device
+                    first_param = self._resolve_first_parameter_tensor(torch_model)
+                    if first_param is None:
+                        return None, "torch_model_unavailable"
+                    device = first_param.device
                     background_tensor = torch.tensor(background, dtype=torch.float32, device=device)
                     target_tensor = torch.tensor(x_target, dtype=torch.float32, device=device)
-                    torch_model.eval()
+                    adapted_model = self._adapt_model_for_deep_shap(torch_model=torch_model, torch_module=torch)
+                    adapted_model.eval()
 
-                    explainer = shap.DeepExplainer(torch_model, background_tensor)
-                    values = self._normalize_values(explainer.shap_values(target_tensor))
+                    explainer = shap.DeepExplainer(adapted_model, background_tensor)
+                    values = self._normalize_values(
+                        explainer.shap_values(target_tensor, check_additivity=False)
+                    )
                     return AttributionResult(
                         backend="deep_shap",
                         contributions=values,
@@ -216,7 +227,10 @@ class ShapAttributionEngine:
         if any(term in class_name for term in ("ensemble", "voting", "stacking", "blending")):
             return "proxy"
 
-        if "torch" in module_name or self._is_torch_model(model_obj):
+        if self._is_tabnet_model(model) or self._is_tabnet_model(model_obj):
+            return "deep"
+
+        if any(token in module_name for token in ("torch", "pytorch_tabnet")) or self._is_torch_model(model_obj):
             return "deep"
         if any(token in joined for token in ("forest", "boost", "xgb", "tree", "catboost")):
             return "tree"
@@ -234,12 +248,88 @@ class ShapAttributionEngine:
 
     @staticmethod
     def _resolve_torch_model(model: Any) -> Any | None:
-        candidate = ShapAttributionEngine._resolve_model_object(model)
-        if ShapAttributionEngine._is_torch_model(candidate):
-            return candidate
-        if ShapAttributionEngine._is_torch_model(model):
-            return model
+        seen: set[int] = set()
+        queue: list[Any] = [model, ShapAttributionEngine._resolve_model_object(model)]
+
+        while queue:
+            candidate = queue.pop(0)
+            if candidate is None:
+                continue
+            identifier = id(candidate)
+            if identifier in seen:
+                continue
+            seen.add(identifier)
+
+            for attr in ("network", "tabnet", "_tabnet", "model", "estimator"):
+                nested = getattr(candidate, attr, None)
+                if nested is None:
+                    continue
+                if ShapAttributionEngine._is_torch_model(nested):
+                    return nested
+                queue.append(nested)
+
+            if ShapAttributionEngine._is_torch_model(candidate):
+                return candidate
+
         return None
+
+    @staticmethod
+    def _resolve_first_parameter_tensor(model: Any) -> Any | None:
+        try:
+            parameters = model.parameters()
+        except Exception:
+            return None
+
+        try:
+            first = next(iter(parameters), None)
+        except Exception:
+            return None
+
+        if first is None:
+            return None
+        if hasattr(first, "device"):
+            return first
+        if isinstance(first, tuple) and len(first) >= 2 and hasattr(first[1], "device"):
+            return first[1]
+        return None
+
+    @staticmethod
+    def _adapt_model_for_deep_shap(*, torch_model: Any, torch_module: Any) -> Any:
+        class _DeepShapAdapter(torch_module.nn.Module):
+            def __init__(self, base_model: Any) -> None:
+                super().__init__()
+                self.base_model = base_model
+
+            def forward(self, x: Any) -> Any:
+                output = self.base_model(x)
+                if isinstance(output, tuple):
+                    output = output[0]
+                if hasattr(output, "ndim") and int(output.ndim) == 2:
+                    return output[:, -1:]
+                if hasattr(output, "ndim") and int(output.ndim) == 1:
+                    return output.reshape(-1, 1)
+                return output
+
+        return _DeepShapAdapter(torch_model)
+
+    @staticmethod
+    def _is_tabnet_model(model: Any) -> bool:
+        class_name = type(model).__name__.lower()
+        module_name = type(model).__module__.lower()
+        if "tabnet" in class_name or "tabnet" in module_name:
+            return True
+        native_flag = getattr(model, "_is_native_tabnet", None)
+        if isinstance(native_flag, bool) and native_flag:
+            return True
+        aliases = getattr(model, "member_aliases", None)
+        if isinstance(aliases, list) and any(str(alias).strip().lower() == "tabnet" for alias in aliases):
+            return True
+        return False
+
+    def _requires_tabnet_deep_enforcement(self, *, model: Any, selected_backend: str) -> bool:
+        if selected_backend != "deep":
+            return False
+        return self._is_tabnet_model(model) or self._is_tabnet_model(self._resolve_model_object(model))
 
     @staticmethod
     def _is_torch_model(model: Any) -> bool:

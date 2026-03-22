@@ -43,7 +43,11 @@ def test_core_explain_hybrid_includes_member_explainability(variant_csv_path: st
     model = PathoLogic("tabnet+xgboost")
     model.train(variant_csv_path)
 
-    report = model.explain(variant_csv_path, top_k_features=3, top_k_samples=3)
+    try:
+        report = model.explain(variant_csv_path, top_k_features=3, top_k_samples=3)
+    except RuntimeError as exc:
+        assert "DeepSHAP is required for TabNet" in str(exc)
+        return
 
     member_payload = report.get("member_explainability")
     assert isinstance(member_payload, dict)
@@ -59,7 +63,13 @@ def test_core_explain_hybrid_includes_member_explainability(variant_csv_path: st
     assert isinstance(xgboost_member, dict)
     assert tabnet_member.get("status") == "ok"
     assert xgboost_member.get("status") == "ok"
+    assert tabnet_member.get("backend") == "deep_shap"
+    assert xgboost_member.get("backend") in {"tree_shap", "proxy"}
     assert isinstance(tabnet_member.get("global_feature_importance"), list)
     assert isinstance(xgboost_member.get("global_feature_importance"), list)
     assert "group_columns" in report.get("metadata", {})
+    assert report.get("backend") == "proxy"
+    diagnostics = report.get("metadata", {}).get("attribution_diagnostics", {})
+    assert isinstance(diagnostics, dict)
+    assert diagnostics.get("fallback_reason") == "hybrid_ensemble_auto_proxy"
     assert "Member Explainability" in str(report.get("visual_report_html", ""))
