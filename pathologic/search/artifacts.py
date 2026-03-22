@@ -15,7 +15,9 @@ from pathologic.explain.error_analysis import MultiDimensionalErrorAnalyzer
 from pathologic.explain.visualizer import ExplainabilityVisualizer
 from pathologic.utils.calibration import (
     apply_beta_scaling,
+    apply_isotonic_scaling,
     apply_platt_scaling,
+    apply_temperature_scaling,
     calibration_report,
     save_probability_histogram,
     save_reliability_diagram,
@@ -175,27 +177,28 @@ def compute_candidate_calibration_artifacts(
         "raw": normality_report(method_scores["raw"]),
     }
 
-    try:
-        method_scores["platt"] = apply_platt_scaling(
-            score_calibration,
-            y_calibration,
-            score_test,
-        )
-        method_reports["platt"] = calibration_report(y_test, method_scores["platt"], n_bins=bins)
-        method_normality["platt"] = normality_report(method_scores["platt"])
-    except Exception as exc:
-        method_reports["platt"] = {"status": "failed", "reason": str(exc)}
-
-    try:
-        method_scores["beta"] = apply_beta_scaling(
-            score_calibration,
-            y_calibration,
-            score_test,
-        )
-        method_reports["beta"] = calibration_report(y_test, method_scores["beta"], n_bins=bins)
-        method_normality["beta"] = normality_report(method_scores["beta"])
-    except Exception as exc:
-        method_reports["beta"] = {"status": "failed", "reason": str(exc)}
+    method_builders: dict[str, Any] = {
+        "platt": apply_platt_scaling,
+        "beta": apply_beta_scaling,
+        "isotonic": apply_isotonic_scaling,
+        "temperature": apply_temperature_scaling,
+    }
+    for method_name, method_builder in method_builders.items():
+        try:
+            method_scores[method_name] = method_builder(
+                score_calibration,
+                y_calibration,
+                score_test,
+            )
+            method_reports[method_name] = calibration_report(
+                y_test,
+                method_scores[method_name],
+                n_bins=bins,
+            )
+            method_normality[method_name] = normality_report(method_scores[method_name])
+        except Exception as exc:
+            method_reports[method_name] = {"status": "failed", "reason": str(exc)}
+            method_normality[method_name] = {"status": "failed", "reason": str(exc)}
 
     histogram_path = calibration_dir / "probability_histogram.png"
     reliability_path = calibration_dir / "reliability_diagram.png"
@@ -242,6 +245,7 @@ def compute_candidate_calibration_artifacts(
                 "status": "ok",
                 "brier_score": float(report["brier_score"]),
                 "ece": float(report["ece"]),
+                "samples": int(report.get("samples", 0)),
             }
         else:
             methods_summary[method_name] = {
@@ -267,4 +271,20 @@ def compute_candidate_calibration_artifacts(
         encoding="utf-8",
     )
     calibration_payload["artifacts"]["calibration_report_json"] = str(calibration_json_path)
+
+    # Render standalone candidate-level calibration HTML with detailed bins and diagnostics.
+    visualizer = ExplainabilityVisualizer()
+    calibration_html_path = calibration_dir / "calibration_report.html"
+    calibration_payload_for_html = {
+        "candidate": candidate_name,
+        "methods": method_reports,
+        "normality_tests": method_normality,
+        "summary": methods_summary,
+        "artifacts": calibration_payload["artifacts"],
+    }
+    visualizer.render_calibration_report_html(
+        calibration_payload_for_html,
+        str(calibration_html_path),
+    )
+    calibration_payload["artifacts"]["calibration_report_html"] = str(calibration_html_path)
     return calibration_payload

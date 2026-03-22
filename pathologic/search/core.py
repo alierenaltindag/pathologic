@@ -233,6 +233,7 @@ def run_exhaustive_search(args: argparse.Namespace) -> dict[str, Any]:
         "objective_only_winner": objective_best.get("candidate"),
         "winner_metrics": best.get("test_metrics", {}),
         "calibration_summary_file": str(calibration_summary_path),
+        "calibration_summary_html_file": str(context.run_dir / "calibration_summary.html"),
         "error_analysis_summary_file": str(error_analysis_summary_path),
         "elapsed_seconds": elapsed,
         "candidates_total": len(context.candidates),

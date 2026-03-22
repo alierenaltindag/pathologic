@@ -72,6 +72,270 @@ class ExplainabilityVisualizer:
             
         return output_path
 
+    def render_calibration_report_html(self, results: dict[str, Any], output_path: str) -> str:
+        """Render candidate-level calibration diagnostics into HTML."""
+        candidate = str(results.get("candidate", "unknown"))
+        summary = results.get("summary", {}) if isinstance(results.get("summary"), dict) else {}
+        methods = results.get("methods", {}) if isinstance(results.get("methods"), dict) else {}
+        normality = (
+            results.get("normality_tests", {})
+            if isinstance(results.get("normality_tests"), dict)
+            else {}
+        )
+        artifacts = results.get("artifacts", {}) if isinstance(results.get("artifacts"), dict) else {}
+
+        ordered_methods = self._ordered_calibration_methods(summary, methods)
+        ranking = [
+            {
+                "method": method,
+                "ece": float(info.get("ece", 0.0)),
+                "brier": float(info.get("brier_score", 0.0)),
+            }
+            for method, info in summary.items()
+            if isinstance(info, dict) and info.get("status") == "ok"
+        ]
+        ranking.sort(key=lambda row: (row["ece"], row["brier"]))
+
+        metrics_rows: list[str] = []
+        for method in ordered_methods:
+            method_summary = summary.get(method, {}) if isinstance(summary.get(method), dict) else {}
+            status = str(method_summary.get("status", "failed"))
+            if status == "ok":
+                metrics_rows.append(
+                    "<tr>"
+                    f"<td>{escape(method)}</td>"
+                    f"<td>{status}</td>"
+                    f"<td>{float(method_summary.get('ece', 0.0)):.6f}</td>"
+                    f"<td>{float(method_summary.get('brier_score', 0.0)):.6f}</td>"
+                    f"<td>{int(method_summary.get('samples', 0))}</td>"
+                    "<td></td>"
+                    "</tr>"
+                )
+            else:
+                metrics_rows.append(
+                    "<tr>"
+                    f"<td>{escape(method)}</td>"
+                    f"<td>{status}</td>"
+                    "<td>-</td><td>-</td><td>-</td>"
+                    f"<td>{escape(str(method_summary.get('reason', 'unknown')))}</td>"
+                    "</tr>"
+                )
+
+        ranking_rows = "".join(
+            "<tr>"
+            f"<td>{idx}</td>"
+            f"<td>{escape(str(item['method']))}</td>"
+            f"<td>{float(item['ece']):.6f}</td>"
+            f"<td>{float(item['brier']):.6f}</td>"
+            "</tr>"
+            for idx, item in enumerate(ranking, start=1)
+        )
+        if not ranking_rows:
+            ranking_rows = "<tr><td colspan='4'>No successful calibration method.</td></tr>"
+
+        normality_rows: list[str] = []
+        for method in ordered_methods:
+            payload = normality.get(method, {}) if isinstance(normality.get(method), dict) else {}
+            if payload.get("status") == "failed":
+                normality_rows.append(
+                    "<tr>"
+                    f"<td>{escape(method)}</td><td>failed</td><td>-</td><td>-</td>"
+                    f"<td>{escape(str(payload.get('reason', 'unknown')))}</td>"
+                    "</tr>"
+                )
+                continue
+            shapiro = payload.get("shapiro", {}) if isinstance(payload.get("shapiro"), dict) else {}
+            shapiro_status = str(shapiro.get("status", "unknown"))
+            if shapiro_status != "ok":
+                normality_rows.append(
+                    "<tr>"
+                    f"<td>{escape(method)}</td><td>{escape(shapiro_status)}</td><td>-</td><td>-</td>"
+                    f"<td>{escape(str(shapiro.get('reason', 'not_available')))}</td>"
+                    "</tr>"
+                )
+                continue
+            p_value = float(shapiro.get("p_value", 0.0))
+            normality_rows.append(
+                "<tr>"
+                f"<td>{escape(method)}</td><td>ok</td>"
+                f"<td>{float(shapiro.get('statistic', 0.0)):.6f}</td>"
+                f"<td>{p_value:.6f}</td>"
+                f"<td>{'normal_like(p>0.05)' if p_value > 0.05 else 'non_normal_like(p<=0.05)'}</td>"
+                "</tr>"
+            )
+        if not normality_rows:
+            normality_rows.append("<tr><td colspan='5'>No normality diagnostics available.</td></tr>")
+
+        bin_rows: list[str] = []
+        for method in ordered_methods:
+            method_payload = methods.get(method, {}) if isinstance(methods.get(method), dict) else {}
+            bins = method_payload.get("bins") if isinstance(method_payload, dict) else None
+            if not isinstance(bins, list):
+                continue
+            for item in bins:
+                if not isinstance(item, dict):
+                    continue
+                bin_rows.append(
+                    "<tr>"
+                    f"<td>{escape(method)}</td>"
+                    f"<td>{int(item.get('bin_index', -1))}</td>"
+                    f"<td>{float(item.get('left', 0.0)):.4f}</td>"
+                    f"<td>{float(item.get('right', 0.0)):.4f}</td>"
+                    f"<td>{int(item.get('count', 0))}</td>"
+                    f"<td>{'-' if item.get('avg_predicted') is None else f'{float(item.get("avg_predicted", 0.0)):.6f}'}</td>"
+                    f"<td>{'-' if item.get('avg_observed') is None else f'{float(item.get("avg_observed", 0.0)):.6f}'}</td>"
+                    f"<td>{'-' if item.get('abs_gap') is None else f'{float(item.get("abs_gap", 0.0)):.6f}'}</td>"
+                    "</tr>"
+                )
+        if not bin_rows:
+            bin_rows.append("<tr><td colspan='8'>No reliability bin details available.</td></tr>")
+
+        image_cards = self._render_image_cards(
+            artifacts,
+            keys=["histogram_png", "reliability_png", "qq_plot_png"],
+        )
+
+        html_content = (
+            "<html><head><meta charset='utf-8'><title>Calibration Report</title>"
+            "<style>"
+            "body{font-family:Segoe UI,Tahoma,sans-serif;line-height:1.5;color:#1f2937;max-width:1200px;margin:0 auto;padding:20px;background:#f3f6fb;}"
+            "h1,h2{color:#0f2942;}"
+            "table{width:100%;border-collapse:collapse;margin-top:8px;}"
+            "th,td{border:1px solid #dbe4ee;padding:8px;text-align:left;background:#fff;font-size:13px;}"
+            "th{background:#eaf1f8;font-weight:700;}"
+            ".card{background:#fff;border:1px solid #dbe4ee;border-radius:8px;padding:14px;margin-bottom:14px;}"
+            ".img-container{text-align:center;margin-top:10px;}"
+            "img{max-width:100%;border:1px solid #dbe4ee;border-radius:6px;}"
+            "</style></head><body>"
+            f"<h1>Calibration Report - {escape(candidate)}</h1>"
+            "<div class='card'><h2>Calibration Metrics</h2>"
+            "<table><thead><tr><th>Method</th><th>Status</th><th>ECE</th><th>Brier</th><th>Samples</th><th>Reason</th></tr></thead><tbody>"
+            + "".join(metrics_rows)
+            + "</tbody></table></div>"
+            "<div class='card'><h2>Method Ranking (ECE -> Brier)</h2>"
+            "<table><thead><tr><th>Rank</th><th>Method</th><th>ECE</th><th>Brier</th></tr></thead><tbody>"
+            + ranking_rows
+            + "</tbody></table></div>"
+            "<div class='card'><h2>Normality Diagnostics (Shapiro)</h2>"
+            "<table><thead><tr><th>Method</th><th>Status</th><th>Statistic</th><th>p-value</th><th>Interpretation</th></tr></thead><tbody>"
+            + "".join(normality_rows)
+            + "</tbody></table></div>"
+            "<div class='card'><h2>Reliability Bin Details</h2>"
+            "<table><thead><tr><th>Method</th><th>Bin</th><th>Left</th><th>Right</th><th>Count</th><th>Avg Predicted</th><th>Avg Observed</th><th>Abs Gap</th></tr></thead><tbody>"
+            + "".join(bin_rows)
+            + "</tbody></table></div>"
+            + image_cards
+            + "</body></html>"
+        )
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        return output_path
+
+    def render_calibration_summary_html(self, results: dict[str, Any], output_path: str) -> str:
+        """Render run-level calibration summary into HTML."""
+        winner = results.get("winner_decision", {}) if isinstance(results.get("winner_decision"), dict) else {}
+        method_ranking = (
+            results.get("candidate_method_ranking", {})
+            if isinstance(results.get("candidate_method_ranking"), dict)
+            else {}
+        )
+        candidate_ranking = (
+            results.get("candidate_calibration_ranking", [])
+            if isinstance(results.get("candidate_calibration_ranking"), list)
+            else []
+        )
+        rows = results.get("rows", []) if isinstance(results.get("rows"), list) else []
+
+        decision_block = (
+            "<div class='card'><h2>Winner Decision</h2>"
+            f"<div><strong>Objective-only winner:</strong> {escape(str(winner.get('objective_only_winner', 'unknown')))}</div>"
+            f"<div><strong>Calibration-aware winner:</strong> {escape(str(winner.get('calibration_aware_winner', 'unknown')))}</div>"
+            f"<div><strong>Changed by calibration:</strong> {escape(str(winner.get('changed_by_calibration', False)))}</div>"
+            f"<div><strong>Penalty Formula:</strong> {escape(str(winner.get('penalty_formula', '')))}</div>"
+            "</div>"
+        )
+
+        candidate_rank_rows = "".join(
+            "<tr>"
+            f"<td>{idx}</td>"
+            f"<td>{escape(str(item.get('candidate', '')))}</td>"
+            f"<td>{float(item.get('objective_score', 0.0)):.6f}</td>"
+            f"<td>{escape(str(item.get('best_calibration_method', '')))}</td>"
+            f"<td>{float(item.get('best_calibration_ece', 0.0)):.6f}</td>"
+            f"<td>{float(item.get('best_calibration_brier', 0.0)):.6f}</td>"
+            f"<td>{float(item.get('calibration_penalty', 0.0)):.6f}</td>"
+            f"<td>{float(item.get('calibration_aware_score', 0.0)):.6f}</td>"
+            "</tr>"
+            for idx, item in enumerate(candidate_ranking, start=1)
+            if isinstance(item, dict)
+        )
+        if not candidate_rank_rows:
+            candidate_rank_rows = "<tr><td colspan='8'>No candidate-level calibration ranking available.</td></tr>"
+
+        method_rows: list[str] = []
+        for candidate_name in sorted(method_ranking.keys()):
+            methods = method_ranking.get(candidate_name, [])
+            if not isinstance(methods, list):
+                continue
+            for idx, item in enumerate(methods, start=1):
+                if not isinstance(item, dict):
+                    continue
+                method_rows.append(
+                    "<tr>"
+                    f"<td>{escape(str(candidate_name))}</td>"
+                    f"<td>{idx}</td>"
+                    f"<td>{escape(str(item.get('method', '')))}</td>"
+                    f"<td>{float(item.get('ece', 0.0)):.6f}</td>"
+                    f"<td>{float(item.get('brier_score', 0.0)):.6f}</td>"
+                    "</tr>"
+                )
+        if not method_rows:
+            method_rows.append("<tr><td colspan='5'>No per-candidate method ranking available.</td></tr>")
+
+        global_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(item.get('candidate', '')))}</td>"
+            f"<td>{escape(str(item.get('method', '')))}</td>"
+            f"<td>{float(item.get('ece', 0.0)):.6f}</td>"
+            f"<td>{float(item.get('brier_score', 0.0)):.6f}</td>"
+            "</tr>"
+            for item in rows
+            if isinstance(item, dict)
+        )
+        if not global_rows:
+            global_rows = "<tr><td colspan='4'>No global calibration method rows.</td></tr>"
+
+        html_content = (
+            "<html><head><meta charset='utf-8'><title>Calibration Summary</title>"
+            "<style>"
+            "body{font-family:Segoe UI,Tahoma,sans-serif;line-height:1.5;color:#1f2937;max-width:1200px;margin:0 auto;padding:20px;background:#f3f6fb;}"
+            "h1,h2{color:#0f2942;}"
+            "table{width:100%;border-collapse:collapse;margin-top:8px;}"
+            "th,td{border:1px solid #dbe4ee;padding:8px;text-align:left;background:#fff;font-size:13px;}"
+            "th{background:#eaf1f8;font-weight:700;}"
+            ".card{background:#fff;border:1px solid #dbe4ee;border-radius:8px;padding:14px;margin-bottom:14px;}"
+            "</style></head><body>"
+            "<h1>Calibration Summary Report</h1>"
+            + decision_block
+            + "<div class='card'><h2>Candidate Calibration Ranking</h2>"
+            "<table><thead><tr><th>Rank</th><th>Candidate</th><th>Objective</th><th>Best Method</th><th>Best ECE</th><th>Best Brier</th><th>Penalty</th><th>Calibration-Aware Score</th></tr></thead><tbody>"
+            + candidate_rank_rows
+            + "</tbody></table></div>"
+            + "<div class='card'><h2>Per-Candidate Method Ranking</h2>"
+            "<table><thead><tr><th>Candidate</th><th>Rank</th><th>Method</th><th>ECE</th><th>Brier</th></tr></thead><tbody>"
+            + "".join(method_rows)
+            + "</tbody></table></div>"
+            + "<div class='card'><h2>All Successful Methods (Global)</h2>"
+            "<table><thead><tr><th>Candidate</th><th>Method</th><th>ECE</th><th>Brier</th></tr></thead><tbody>"
+            + global_rows
+            + "</tbody></table></div>"
+            + "</body></html>"
+        )
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        return output_path
+
     def render_html(self, report: ExplainabilityReport) -> str:
         max_global_abs = max(
             (item.absolute_contribution for item in report.global_feature_importance),
@@ -347,6 +611,46 @@ class ExplainabilityVisualizer:
             f"{top_features_html}"
             "</ul></div></div>"
         )
+
+    @staticmethod
+    def _ordered_calibration_methods(
+        summary: dict[str, Any],
+        methods: dict[str, Any],
+    ) -> list[str]:
+        preferred = ["raw", "platt", "beta", "isotonic", "temperature"]
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for name in preferred:
+            if name in summary or name in methods:
+                ordered.append(name)
+                seen.add(name)
+        for source in (summary, methods):
+            for key in source.keys():
+                token = str(key)
+                if token in seen:
+                    continue
+                ordered.append(token)
+                seen.add(token)
+        return ordered
+
+    @staticmethod
+    def _render_image_cards(artifacts: dict[str, Any], *, keys: list[str]) -> str:
+        cards: list[str] = []
+        for key in keys:
+            value = artifacts.get(key)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            filename = Path(value).name
+            cards.append(
+                "<div class='card'><h2>"
+                + escape(str(key))
+                + "</h2><div class='img-container'><img src='"
+                + escape(filename)
+                + "' alt='"
+                + escape(filename)
+                + "'></div></div>"
+            )
+        return "".join(cards)
 
     @staticmethod
     def _render_error_analysis(errors: list[dict[str, Any]]) -> str:

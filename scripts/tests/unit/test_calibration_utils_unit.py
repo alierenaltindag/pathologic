@@ -5,7 +5,9 @@ import pytest
 
 from pathologic.utils.calibration import (
     apply_beta_scaling,
+    apply_isotonic_scaling,
     apply_platt_scaling,
+    apply_temperature_scaling,
     calibration_report,
     expected_calibration_error,
 )
@@ -52,6 +54,30 @@ def test_beta_scaling_returns_valid_probabilities() -> None:
     s_test = np.array([0.15, 0.5, 0.95], dtype=float)
 
     calibrated = apply_beta_scaling(s_cal, y_cal, s_test)
+
+    assert calibrated.shape == (3,)
+    assert np.all(calibrated >= 0.0)
+    assert np.all(calibrated <= 1.0)
+
+
+def test_isotonic_scaling_returns_valid_probabilities() -> None:
+    y_cal = np.array([0, 0, 0, 1, 1, 1], dtype=int)
+    s_cal = np.array([0.05, 0.2, 0.4, 0.6, 0.8, 0.95], dtype=float)
+    s_test = np.array([0.1, 0.5, 0.9], dtype=float)
+
+    calibrated = apply_isotonic_scaling(s_cal, y_cal, s_test)
+
+    assert calibrated.shape == (3,)
+    assert np.all(calibrated >= 0.0)
+    assert np.all(calibrated <= 1.0)
+
+
+def test_temperature_scaling_returns_valid_probabilities() -> None:
+    y_cal = np.array([0, 0, 0, 1, 1, 1], dtype=int)
+    s_cal = np.array([0.08, 0.15, 0.35, 0.65, 0.82, 0.93], dtype=float)
+    s_test = np.array([0.12, 0.55, 0.91], dtype=float)
+
+    calibrated = apply_temperature_scaling(s_cal, y_cal, s_test)
 
     assert calibrated.shape == (3,)
     assert np.all(calibrated >= 0.0)

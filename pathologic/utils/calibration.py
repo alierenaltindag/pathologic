@@ -9,8 +9,9 @@ from typing import Any
 import matplotlib
 import numpy as np
 from sklearn.calibration import calibration_curve
+from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import brier_score_loss
+from sklearn.metrics import brier_score_loss, log_loss
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -66,6 +67,66 @@ def apply_beta_scaling(
     calibrator = BetaCalibration()
     calibrator.fit(x_cal, y_cal)
     transformed = calibrator.predict(x_target)
+    return _clip_probabilities(np.asarray(transformed, dtype=float))
+
+
+def apply_isotonic_scaling(
+    calibration_scores: np.ndarray,
+    calibration_labels: np.ndarray,
+    target_scores: np.ndarray,
+) -> np.ndarray:
+    """Fit isotonic regression on calibration scores and transform target scores."""
+    y_cal = np.asarray(calibration_labels, dtype=int).reshape(-1)
+    _validate_binary_labels(y_cal)
+
+    x_cal = _clip_probabilities(np.asarray(calibration_scores, dtype=float))
+    x_target = _clip_probabilities(np.asarray(target_scores, dtype=float))
+
+    calibrator = IsotonicRegression(out_of_bounds="clip")
+    calibrator.fit(x_cal, y_cal)
+    return _clip_probabilities(np.asarray(calibrator.predict(x_target), dtype=float))
+
+
+def _probabilities_to_logits(values: np.ndarray) -> np.ndarray:
+    probs = _clip_probabilities(np.asarray(values, dtype=float))
+    return np.log(probs / (1.0 - probs))
+
+
+def _logits_to_probabilities(values: np.ndarray) -> np.ndarray:
+    logits = np.asarray(values, dtype=float)
+    return _clip_probabilities(1.0 / (1.0 + np.exp(-logits)))
+
+
+def apply_temperature_scaling(
+    calibration_scores: np.ndarray,
+    calibration_labels: np.ndarray,
+    target_scores: np.ndarray,
+) -> np.ndarray:
+    """Fit temperature scaling on calibration scores and transform target scores."""
+    y_cal = np.asarray(calibration_labels, dtype=int).reshape(-1)
+    _validate_binary_labels(y_cal)
+
+    logits_cal = _probabilities_to_logits(np.asarray(calibration_scores, dtype=float))
+    logits_target = _probabilities_to_logits(np.asarray(target_scores, dtype=float))
+
+    temperatures = np.geomspace(0.05, 5.0, num=101)
+    best_temperature: float | None = None
+    best_loss = float("inf")
+
+    for temperature in temperatures:
+        scaled = logits_cal / float(temperature)
+        calibrated_probs = _logits_to_probabilities(scaled)
+        loss = float(log_loss(y_cal, calibrated_probs, labels=[0, 1]))
+        if not np.isfinite(loss):
+            continue
+        if loss < best_loss:
+            best_loss = loss
+            best_temperature = float(temperature)
+
+    if best_temperature is None:
+        raise RuntimeError("Temperature scaling failed to find a valid temperature.")
+
+    transformed = _logits_to_probabilities(logits_target / best_temperature)
     return _clip_probabilities(np.asarray(transformed, dtype=float))
 
 

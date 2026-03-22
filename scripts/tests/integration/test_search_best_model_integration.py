@@ -57,6 +57,14 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
     calibration = first_row.get("calibration")
     assert isinstance(calibration, dict)
     assert "methods" in calibration
+    summary = calibration.get("summary")
+    assert isinstance(summary, dict)
+    for method_name in ("raw", "platt", "beta", "isotonic", "temperature"):
+        assert method_name in summary
+        method_summary = summary[method_name]
+        assert isinstance(method_summary, dict)
+        assert method_summary.get("status") in {"ok", "failed"}
+
     artifacts = calibration.get("artifacts", {})
     assert isinstance(artifacts, dict)
     for key in (
@@ -65,12 +73,15 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
         "qq_plot_png",
         "reliability_bins_csv",
         "calibration_report_json",
+        "calibration_report_html",
     ):
         assert key in artifacts
         assert Path(str(artifacts[key])).exists()
 
     calibration_summary_path = run_dir / "calibration_summary.json"
     assert calibration_summary_path.exists()
+    calibration_summary_html_path = run_dir / "calibration_summary.html"
+    assert calibration_summary_html_path.exists()
     calibration_summary = json.loads(calibration_summary_path.read_text(encoding="utf-8"))
     assert "rows" in calibration_summary
 

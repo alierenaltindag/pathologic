@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+from pathologic.explain.visualizer import ExplainabilityVisualizer
 from pathologic.search import artifacts as _search_artifacts
 
 
@@ -207,6 +208,15 @@ def write_run_reports(
         json.dumps(calibration_summary, ensure_ascii=True, indent=2),
         encoding="utf-8",
     )
+    calibration_summary_html_path = run_dir / "calibration_summary.html"
+    try:
+        ExplainabilityVisualizer().render_calibration_summary_html(
+            calibration_summary,
+            str(calibration_summary_html_path),
+        )
+    except Exception:
+        # HTML rendering is best-effort and must not block search completion.
+        pass
 
     error_analysis_summary_path = run_dir / "error_analysis_summary.json"
     error_analysis_summary = _search_artifacts.build_error_analysis_run_summary(
