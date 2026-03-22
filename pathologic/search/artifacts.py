@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from pathologic import PathoLogic
+from pathologic.engine import Evaluator
 from pathologic.explain.error_analysis import MultiDimensionalErrorAnalyzer
 from pathologic.explain.visualizer import ExplainabilityVisualizer
 from pathologic.utils.calibration import (
@@ -288,3 +289,75 @@ def compute_candidate_calibration_artifacts(
     )
     calibration_payload["artifacts"]["calibration_report_html"] = str(calibration_html_path)
     return calibration_payload
+
+
+def compute_candidate_panel_threshold_artifacts(
+    *,
+    model: PathoLogic,
+    dataset: pd.DataFrame,
+    run_dir: Path,
+    candidate_name: str,
+    feature_columns: list[str],
+    panel_column: str = "Veri_Kaynagi_Paneli",
+    label_column: str = "label",
+    min_samples: int = 1,
+    default_threshold: float = 0.5,
+) -> dict[str, Any]:
+    payload = extract_prediction_payload(
+        model=model,
+        dataset=dataset,
+        feature_columns=feature_columns,
+        label_column=label_column,
+    )
+    transformed = payload["transformed"]
+
+    if panel_column not in transformed.columns:
+        return {
+            "candidate": candidate_name,
+            "status": "skipped",
+            "reason": f"missing_panel_column:{panel_column}",
+            "panel_column": panel_column,
+            "rows": [],
+            "artifacts": {},
+        }
+
+    panel_rows = Evaluator.panel_oof_f1_max_thresholds(
+        y_true=np.asarray(payload["y_true"], dtype=int),
+        y_score=np.asarray(payload["y_score"], dtype=float),
+        panel_values=transformed[panel_column].astype(str).to_numpy(),
+        min_samples=int(min_samples),
+        default_threshold=float(default_threshold),
+    )
+
+    panel_dir = run_dir / "panel_thresholds" / candidate_slug(candidate_name)
+    panel_dir.mkdir(parents=True, exist_ok=True)
+
+    panel_payload: dict[str, Any] = {
+        "candidate": candidate_name,
+        "status": "ok",
+        "panel_column": panel_column,
+        "rows": panel_rows,
+        "summary": {
+            "panel_count": int(len(panel_rows)),
+            "optimized_panel_count": int(sum(int(row.get("optimized", 0)) for row in panel_rows)),
+            "default_threshold": float(default_threshold),
+            "min_samples": int(min_samples),
+        },
+        "artifacts": {},
+    }
+
+    panel_json_path = panel_dir / "panel_thresholds_report.json"
+    panel_json_path.write_text(
+        json.dumps(panel_payload, ensure_ascii=True, indent=2),
+        encoding="utf-8",
+    )
+    panel_payload["artifacts"]["panel_thresholds_report_json"] = str(panel_json_path)
+
+    panel_html_path = panel_dir / "panel_thresholds_report.html"
+    ExplainabilityVisualizer().render_panel_threshold_report_html(
+        panel_payload,
+        str(panel_html_path),
+    )
+    panel_payload["artifacts"]["panel_thresholds_report_html"] = str(panel_html_path)
+
+    return panel_payload

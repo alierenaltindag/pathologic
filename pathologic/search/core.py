@@ -195,7 +195,7 @@ def run_exhaustive_search(args: argparse.Namespace) -> dict[str, Any]:
                     str(exc),
                 )
 
-    calibration_summary_path, error_analysis_summary_path = _search_reporting.write_run_reports(
+    calibration_summary_path, error_analysis_summary_path, train_report_path = _search_reporting.write_run_reports(
         run_dir=context.run_dir,
         objective=args.objective,
         budget_profile=args.budget_profile,
@@ -235,6 +235,8 @@ def run_exhaustive_search(args: argparse.Namespace) -> dict[str, Any]:
         "calibration_summary_file": str(calibration_summary_path),
         "calibration_summary_html_file": str(context.run_dir / "calibration_summary.html"),
         "error_analysis_summary_file": str(error_analysis_summary_path),
+        "train_report_file": str(train_report_path),
+        "train_report_html_file": str(context.run_dir / "train_report.html"),
         "elapsed_seconds": elapsed,
         "candidates_total": len(context.candidates),
         "candidates_ok": len(ranked),

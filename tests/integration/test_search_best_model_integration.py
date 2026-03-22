@@ -89,6 +89,19 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
         assert key in artifacts
         assert Path(str(artifacts[key])).exists()
 
+    panel_thresholds = first_row.get("panel_thresholds")
+    assert isinstance(panel_thresholds, dict)
+    assert panel_thresholds.get("status") in {"ok", "skipped", "failed"}
+    if panel_thresholds.get("status") == "ok":
+        panel_artifacts = panel_thresholds.get("artifacts", {})
+        assert isinstance(panel_artifacts, dict)
+        for key in (
+            "panel_thresholds_report_json",
+            "panel_thresholds_report_html",
+        ):
+            assert key in panel_artifacts
+            assert Path(str(panel_artifacts[key])).exists()
+
     calibration_summary_path = run_dir / "calibration_summary.json"
     assert calibration_summary_path.exists()
     calibration_summary_html_path = run_dir / "calibration_summary.html"
@@ -171,6 +184,22 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
     for key in ("train_test_shared_genes", "train_val_shared_genes", "val_test_shared_genes"):
         if key in summary:
             assert int(summary[key]) == 0
+
+    train_report_path = run_dir / "train_report.json"
+    train_report_html_path = run_dir / "train_report.html"
+    assert train_report_path.exists()
+    assert train_report_html_path.exists()
+
+    train_report = json.loads(train_report_path.read_text(encoding="utf-8"))
+    assert train_report.get("objective") == "f1"
+    assert isinstance(train_report.get("candidates"), list)
+    assert train_report["candidates"], "Expected candidate quick summary rows"
+
+    winner_info = train_report.get("winner")
+    assert isinstance(winner_info, dict)
+    assert winner_info.get("candidate") == winner_candidate
+    assert isinstance(winner_info.get("selected_params"), dict)
+    assert isinstance(winner_info.get("test_metrics"), dict)
 
 
 def test_search_best_model_hybrid_runs_nas_only_for_neural_member(tmp_path: Path) -> None:

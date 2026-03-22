@@ -336,6 +336,60 @@ class ExplainabilityVisualizer:
             f.write(html_content)
         return output_path
 
+    def render_panel_threshold_report_html(self, results: dict[str, Any], output_path: str) -> str:
+        """Render per-panel F1-max threshold report into HTML."""
+        candidate = str(results.get("candidate", "unknown"))
+        panel_column = str(results.get("panel_column", "panel"))
+        summary = results.get("summary", {}) if isinstance(results.get("summary"), dict) else {}
+        rows = results.get("rows", []) if isinstance(results.get("rows"), list) else []
+
+        body_rows: list[str] = []
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            body_rows.append(
+                "<tr>"
+                f"<td>{escape(str(item.get('panel', 'unknown')))}</td>"
+                f"<td>{float(item.get('threshold', 0.5)):.6f}</td>"
+                f"<td>{float(item.get('f1', 0.0)):.6f}</td>"
+                f"<td>{int(item.get('sample_count', 0))}</td>"
+                f"<td>{int(item.get('positive_count', 0))}</td>"
+                f"<td>{int(item.get('negative_count', 0))}</td>"
+                f"<td>{'yes' if int(item.get('optimized', 0)) == 1 else 'no'}</td>"
+                "</tr>"
+            )
+        if not body_rows:
+            body_rows.append("<tr><td colspan='7'>No panel threshold rows available.</td></tr>")
+
+        html_content = (
+            "<html><head><meta charset='utf-8'><title>Panel Threshold Report</title>"
+            "<style>"
+            "body{font-family:Segoe UI,Tahoma,sans-serif;line-height:1.5;color:#1f2937;max-width:1100px;margin:0 auto;padding:20px;background:#f3f6fb;}"
+            "h1,h2{color:#0f2942;}"
+            "table{width:100%;border-collapse:collapse;margin-top:8px;}"
+            "th,td{border:1px solid #dbe4ee;padding:8px;text-align:left;background:#fff;font-size:13px;}"
+            "th{background:#eaf1f8;font-weight:700;}"
+            ".card{background:#fff;border:1px solid #dbe4ee;border-radius:8px;padding:14px;margin-bottom:14px;}"
+            "</style></head><body>"
+            f"<h1>Panel-Based F1-max Thresholds - {escape(candidate)}</h1>"
+            "<div class='card'>"
+            f"<div><strong>Panel column:</strong> {escape(panel_column)}</div>"
+            f"<div><strong>Panel count:</strong> {int(summary.get('panel_count', 0))}</div>"
+            f"<div><strong>Optimized panel count:</strong> {int(summary.get('optimized_panel_count', 0))}</div>"
+            f"<div><strong>Default threshold:</strong> {float(summary.get('default_threshold', 0.5)):.6f}</div>"
+            f"<div><strong>Min samples:</strong> {int(summary.get('min_samples', 1))}</div>"
+            "</div>"
+            "<div class='card'><h2>Per-Panel Results</h2>"
+            "<table><thead><tr><th>Panel</th><th>Threshold</th><th>F1</th><th>Samples</th><th>Positive</th><th>Negative</th><th>Optimized</th></tr></thead><tbody>"
+            + "".join(body_rows)
+            + "</tbody></table></div>"
+            "</body></html>"
+        )
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        return output_path
+
     def render_html(self, report: ExplainabilityReport) -> str:
         max_global_abs = max(
             (item.absolute_contribution for item in report.global_feature_importance),

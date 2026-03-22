@@ -43,3 +43,46 @@ def test_evaluator_to_dict_is_serializable_shape() -> None:
     assert "metrics" in payload
     assert "grouped_metrics" in payload
     assert "false_positive_hotspots" in payload
+
+
+def test_panel_oof_f1_max_thresholds_returns_per_panel_best_threshold() -> None:
+    y_true = np.array([0, 1, 0, 1, 0, 1])
+    y_score = np.array([0.10, 0.90, 0.30, 0.70, 0.20, 0.80])
+    panels = np.array(["P1", "P1", "P1", "P2", "P2", "P2"])
+
+    rows = Evaluator.panel_oof_f1_max_thresholds(
+        y_true=y_true,
+        y_score=y_score,
+        panel_values=panels,
+        min_samples=1,
+        default_threshold=0.5,
+    )
+
+    assert [row["panel"] for row in rows] == ["P1", "P2"]
+    p1 = next(row for row in rows if row["panel"] == "P1")
+    p2 = next(row for row in rows if row["panel"] == "P2")
+
+    assert p1["optimized"] == 1
+    assert p2["optimized"] == 1
+    assert float(p1["threshold"]) in {0.3, 0.9}
+    assert float(p2["threshold"]) in {0.7, 0.8}
+    assert float(p1["f1"]) == 1.0
+    assert float(p2["f1"]) == 1.0
+
+
+def test_panel_oof_f1_max_thresholds_falls_back_when_single_class_panel() -> None:
+    y_true = np.array([1, 1, 1, 0, 1])
+    y_score = np.array([0.95, 0.70, 0.20, 0.80, 0.60])
+    panels = np.array(["P1", "P1", "P1", "P2", "P2"])
+
+    rows = Evaluator.panel_oof_f1_max_thresholds(
+        y_true=y_true,
+        y_score=y_score,
+        panel_values=panels,
+        min_samples=1,
+        default_threshold=0.5,
+    )
+
+    p1 = next(row for row in rows if row["panel"] == "P1")
+    assert p1["optimized"] == 0
+    assert float(p1["threshold"]) == 0.5

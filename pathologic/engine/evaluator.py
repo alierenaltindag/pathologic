@@ -90,6 +90,105 @@ class Evaluator:
             false_positive_hotspots=hotspots,
         )
 
+    @staticmethod
+    def panel_oof_f1_max_thresholds(
+        *,
+        y_true: np.ndarray,
+        y_score: np.ndarray,
+        panel_values: pd.Series | np.ndarray,
+        min_samples: int = 1,
+        default_threshold: float = 0.5,
+    ) -> list[dict[str, float | int | str]]:
+        """Find per-panel OOF thresholds that maximize F1.
+
+        This helper is designed for out-of-fold (OOF) probability scores where
+        each row has an associated panel/group label.
+        """
+        if min_samples < 1:
+            raise ValueError("min_samples must be >= 1.")
+
+        y_true_arr = np.asarray(y_true, dtype=int).reshape(-1)
+        y_score_arr = np.asarray(y_score, dtype=float).reshape(-1)
+        panel_arr = pd.Series(panel_values).astype(str).to_numpy()
+
+        if y_true_arr.shape[0] != y_score_arr.shape[0] or y_true_arr.shape[0] != panel_arr.shape[0]:
+            raise ValueError("y_true, y_score and panel_values must have the same length.")
+
+        frame = pd.DataFrame(
+            {
+                "y_true": y_true_arr,
+                "y_score": y_score_arr,
+                "panel": panel_arr,
+            }
+        )
+        frame = frame[np.isfinite(frame["y_score"].to_numpy())].reset_index(drop=True)
+
+        thresholds: list[dict[str, float | int | str]] = []
+        for panel_name, subset in frame.groupby("panel", sort=True):
+            y_panel = subset["y_true"].to_numpy(dtype=int)
+            score_panel = subset["y_score"].to_numpy(dtype=float)
+            sample_count = int(y_panel.shape[0])
+            positive_count = int((y_panel == 1).sum())
+            negative_count = int((y_panel == 0).sum())
+
+            # If a panel cannot support threshold search, return deterministic fallback.
+            if (
+                sample_count < min_samples
+                or np.unique(y_panel).size < 2
+                or np.unique(score_panel).size < 2
+            ):
+                fallback_pred = (score_panel >= float(default_threshold)).astype(int)
+                fallback_f1 = float(f1_score(y_panel, fallback_pred, zero_division=0))
+                thresholds.append(
+                    {
+                        "panel": str(panel_name),
+                        "threshold": float(default_threshold),
+                        "f1": fallback_f1,
+                        "sample_count": sample_count,
+                        "positive_count": positive_count,
+                        "negative_count": negative_count,
+                        "optimized": 0,
+                    }
+                )
+                continue
+
+            candidates = np.unique(score_panel)
+            best_threshold = float(default_threshold)
+            best_f1 = -1.0
+            best_distance = float("inf")
+
+            for candidate in candidates:
+                threshold = float(candidate)
+                pred = (score_panel >= threshold).astype(int)
+                score = float(f1_score(y_panel, pred, zero_division=0))
+                distance = abs(threshold - float(default_threshold))
+                if (
+                    score > best_f1
+                    or (np.isclose(score, best_f1) and distance < best_distance)
+                    or (
+                        np.isclose(score, best_f1)
+                        and np.isclose(distance, best_distance)
+                        and threshold < best_threshold
+                    )
+                ):
+                    best_f1 = score
+                    best_threshold = threshold
+                    best_distance = distance
+
+            thresholds.append(
+                {
+                    "panel": str(panel_name),
+                    "threshold": float(best_threshold),
+                    "f1": float(best_f1),
+                    "sample_count": sample_count,
+                    "positive_count": positive_count,
+                    "negative_count": negative_count,
+                    "optimized": 1,
+                }
+            )
+
+        return thresholds
+
     def _compute_metrics(
         self,
         y_true: np.ndarray,

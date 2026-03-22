@@ -245,6 +245,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Calibration-aware winner penalty weight for Brier score",
     )
     parser.add_argument(
+        "--disable-panel-thresholds",
+        action="store_true",
+        help="Disable per-panel F1-max threshold artifact generation",
+    )
+    parser.add_argument(
+        "--panel-threshold-column",
+        default="Veri_Kaynagi_Paneli",
+        help="Column name used for per-panel F1-max threshold computation",
+    )
+    parser.add_argument(
+        "--panel-threshold-min-samples",
+        type=int,
+        default=1,
+        help="Minimum samples required per panel for threshold optimization",
+    )
+    parser.add_argument(
+        "--panel-threshold-default",
+        type=float,
+        default=0.5,
+        help="Fallback threshold used when panel-level optimization is not possible",
+    )
+    parser.add_argument(
         "--disable-explainability",
         action="store_true",
         help="Disable explainability and false-positive hotspot artifact generation",

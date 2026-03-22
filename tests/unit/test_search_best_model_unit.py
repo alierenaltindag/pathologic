@@ -231,10 +231,35 @@ def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     assert args.model_pool == "xgboost,catboost,lightgbm"
     assert args.error_analysis_mode == "hybrid"
     assert args.disable_error_analysis is False
+    assert args.disable_panel_thresholds is False
+    assert args.panel_threshold_column == "Veri_Kaynagi_Paneli"
+    assert args.panel_threshold_min_samples == 1
+    assert args.panel_threshold_default == 0.5
     assert args.hybrid_strategy == "soft_voting"
     assert args.hybrid_weighting_policy == "auto"
     assert args.hybrid_tune_strategy_and_params is True
     assert args.max_hybrid_combination_size == expected_max_hybrid_size
+
+
+def test_arg_parser_accepts_panel_threshold_overrides() -> None:
+    parser = build_arg_parser()
+    args = parser.parse_args(
+        [
+            "data.csv",
+            "--disable-panel-thresholds",
+            "--panel-threshold-column",
+            "panel_id",
+            "--panel-threshold-min-samples",
+            "5",
+            "--panel-threshold-default",
+            "0.42",
+        ]
+    )
+
+    assert args.disable_panel_thresholds is True
+    assert args.panel_threshold_column == "panel_id"
+    assert args.panel_threshold_min_samples == 5
+    assert args.panel_threshold_default == 0.42
 
 
 def test_arg_parser_allows_verbose_inner_search_flag() -> None:

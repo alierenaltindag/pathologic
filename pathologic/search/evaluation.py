@@ -389,6 +389,42 @@ def evaluate_candidate(
         )
         stage_update("calibration_fit", state="done")
 
+        if bool(getattr(args, "disable_panel_thresholds", False)):
+            panel_thresholds_payload = {
+                "candidate": candidate.name,
+                "status": "skipped",
+                "reason": "disabled_by_flag",
+                "panel_column": str(getattr(args, "panel_threshold_column", "Veri_Kaynagi_Paneli")),
+                "rows": [],
+                "artifacts": {},
+            }
+        else:
+            try:
+                panel_thresholds_payload = _search_artifacts.compute_candidate_panel_threshold_artifacts(
+                    model=model,
+                    dataset=outer_calibration_df,
+                    run_dir=run_dir,
+                    candidate_name=candidate.name,
+                    feature_columns=feature_columns,
+                    panel_column=str(
+                        getattr(args, "panel_threshold_column", "Veri_Kaynagi_Paneli")
+                    ),
+                    label_column="label",
+                    min_samples=int(getattr(args, "panel_threshold_min_samples", 1)),
+                    default_threshold=float(getattr(args, "panel_threshold_default", 0.5)),
+                )
+            except Exception as exc:
+                panel_thresholds_payload = {
+                    "candidate": candidate.name,
+                    "status": "failed",
+                    "reason": str(exc),
+                    "panel_column": str(
+                        getattr(args, "panel_threshold_column", "Veri_Kaynagi_Paneli")
+                    ),
+                    "rows": [],
+                    "artifacts": {},
+                }
+
         stage_update("calibration_eval", state="start")
         y_test, score_test = _search_artifacts.extract_scores_from_model(
             model=model,
@@ -445,6 +481,7 @@ def evaluate_candidate(
         row["test_metrics"] = metrics
         row["explainability"] = explain_payload
         row["calibration"] = calibration_payload
+        row["panel_thresholds"] = panel_thresholds_payload
         row["error_analysis"] = error_analysis_payload
         row["runtime_seconds"] = float(monotonic() - step_start)
         run_logger.info(
