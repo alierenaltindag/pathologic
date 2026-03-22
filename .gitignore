@@ -30,3 +30,6 @@ dist/
 Roadmap.mdcatboost_info/
 pathologic.egg-info/
 data/
+
+# Generated HTML reports
+reports/outputs/

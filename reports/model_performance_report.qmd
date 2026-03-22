@@ -66,6 +66,14 @@ display(Markdown(f"""
 """))
 ```
 
+## Temel Performans Metrikleri
+Raporda yer alan modeller karşılaştırılırken aşağıdaki sınıflandırma başarı ölçütleri kullanılmıştır:
+
+* **F1 Skoru (F1 Score):** Hassasiyet (Precision) ve Duyarlılık (Recall) metriklerinin harmonik ortalamasıdır. Dengesiz veri setlerinde ve genel model kıyaslamalarında dikkate alınması gereken en temel dengeli başarı göstergesidir.
+* **Hassasiyet (Precision):** Modelin "pozitif" olarak tahmin ettiği vakaların yüzde kaçının gerçekten pozitif olduğunu gösterir. Yüksek olması, modelin asılsız alarm (Yanlış Pozitif - False Positive) üretme ihtimalinin düşük olduğunu ifade eder.
+* **Duyarlılık (Recall):** Gerçek hayattaki tüm pozitif vakaların model tarafından yüzde kaçının hedef olarak yakalanabildiğini gösterir. Yüksek olması, asıl bulmamız gereken hedeflerin gözden kaçırılmadığı (Yanlış Negatif - False Negative) anlamına gelir.
+* **ROC AUC:** Modelin pozitif ve negatif sınıfları birbirinden ne kadar iyi ayırabildiğini genel olarak ölçer. Eşik değerinden (threshold) bağımsız bir metriktir; 1.0 skoru mükemmel ayrımı, 0.5 ise zarsal (rastgele) tahmini ifade eder.
+
 ## 1. Genel Model Liderlik Tablosu
 Tüm modellerin performans metriklerini içeren ana tablo. En yüksek F1 skoruna sahip modeller üstte yer almaktadır.
 

@@ -93,16 +93,21 @@ REPORT_FILENAME="${FILE_TIME}_${HOSTNAME}.html"
 
 # Run Quarto from inside the reports directory to prevent resource resolution errors
 cd reports
+mkdir -p outputs
+
 $QUARTO_BIN render model_performance_report.qmd \
     --output "$REPORT_FILENAME" \
     -P csv_path:"$RELATIVE_CSV_PATH" \
     -P run_profile:"$BUDGET" \
     -P run_machine:"$HOSTNAME" \
     -P run_time:"$CURRENT_TIME"
+
+# Dosyayı güvenli bir şekilde kalıcı outputs klasörüne taşıyoruz
+mv "$REPORT_FILENAME" outputs/
 cd ..
 
 echo ""
 echo "=========================================================="
 echo "✅ Pipeline Completed Successfully!"
-echo "📊 Your dynamic report is ready at: reports/$REPORT_FILENAME"
+echo "📊 Your dynamic report is ready at: reports/outputs/$REPORT_FILENAME"
 echo "=========================================================="
