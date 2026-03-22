@@ -705,9 +705,9 @@ class PathoLogic:
                         processor=processor,
                     )
 
-                    x_train = train_processed[fold_feature_columns].to_numpy(dtype=float)
+                    x_train = train_processed[fold_feature_columns].astype(float)
                     y_train = train_processed[label_column].to_numpy(dtype=int)
-                    x_val = val_processed[fold_feature_columns].to_numpy(dtype=float)
+                    x_val = val_processed[fold_feature_columns].astype(float)
                     y_val = val_processed[label_column].to_numpy(dtype=int)
 
                     if len(x_train) == 0 or len(x_val) == 0:
@@ -1458,6 +1458,13 @@ class PathoLogic:
         """Attach GPU-oriented model params when CUDA is available and supported."""
         merged = dict(model_params)
         if self.device != "cuda":
+            # LightGBM GPU backend is OpenCL-based and can work even when torch CUDA detector is false.
+            if "+" in self.model_name:
+                for alias in parse_hybrid_alias(self.model_name):
+                    if alias == "lightgbm":
+                        merged.setdefault(f"member__{alias}__device", "gpu")
+            elif self.model_name == "lightgbm":
+                merged.setdefault("device", "gpu")
             return merged
 
         if "+" in self.model_name:

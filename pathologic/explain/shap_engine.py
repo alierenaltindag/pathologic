@@ -232,7 +232,10 @@ class ShapAttributionEngine:
 
         if any(token in module_name for token in ("torch", "pytorch_tabnet")) or self._is_torch_model(model_obj):
             return "deep"
-        if any(token in joined for token in ("forest", "boost", "xgb", "tree", "catboost")):
+        if any(
+            token in joined
+            for token in ("forest", "boost", "xgb", "tree", "catboost", "lightgbm", "lgbm")
+        ):
             return "tree"
         if any(token in joined for token in ("logistic", "linear", "ridge", "lasso")):
             return "linear"

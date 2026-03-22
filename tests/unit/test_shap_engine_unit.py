@@ -27,6 +27,15 @@ class _LinearWrapper:
         self.estimator = LogisticRegression(random_state=42)
 
 
+class _LightGBMEstimatorLike:
+    __module__ = "lightgbm.sklearn"
+
+
+class _LightGBMWrapper:
+    def __init__(self) -> None:
+        self.estimator = _LightGBMEstimatorLike()
+
+
 class _HybridLikeWrapper:
     def __init__(self) -> None:
         self.model = self
@@ -94,6 +103,7 @@ def test_shap_engine_auto_backend_selection_by_model_type() -> None:
     engine = ShapAttributionEngine(backend="auto", random_state=42)
 
     assert engine._select_backend(_TreeWrapper()) == "tree"
+    assert engine._select_backend(_LightGBMWrapper()) == "tree"
     assert engine._select_backend(_LinearWrapper()) == "linear"
     assert engine._select_backend(_DummyProbModel()) == "shap"
     assert engine._select_backend(_HybridLikeWrapper()) == "shap"

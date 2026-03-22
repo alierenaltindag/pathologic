@@ -6,6 +6,7 @@ import importlib
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.model_selection import train_test_split
 
@@ -81,7 +82,7 @@ class LightGBMWrapper:
                 if detected == "cuda":
                     preferred_device = "cuda"
             
-            if preferred_device == "cuda":
+            if preferred_device in {"cuda", "gpu"}:
                 params["device"] = "gpu" # LightGBM uses 'gpu' for device param
             
             try:
@@ -156,11 +157,26 @@ class LightGBMWrapper:
 
     def predict(self, X: Any) -> np.ndarray:
         """Predict classes."""
-        return self.estimator.predict(X)
+        return self.estimator.predict(self._normalize_inference_input(X))
 
     def predict_proba(self, X: Any) -> np.ndarray:
         """Predict class probabilities."""
-        return self.estimator.predict_proba(X)
+        return self.estimator.predict_proba(self._normalize_inference_input(X))
+
+    def _normalize_inference_input(self, X: Any) -> Any:
+        """Provide named columns when estimator expects feature names."""
+        if not isinstance(X, np.ndarray) or X.ndim != 2:
+            return X
+
+        feature_names = getattr(self.estimator, "feature_name_", None)
+        if not isinstance(feature_names, list) or len(feature_names) != X.shape[1]:
+            return X
+
+        normalized_columns = [str(name) for name in feature_names]
+        if any(not name for name in normalized_columns):
+            return X
+
+        return pd.DataFrame(X, columns=normalized_columns)
 
     @property
     def feature_importances_(self) -> np.ndarray:

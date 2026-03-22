@@ -25,6 +25,7 @@ from pathologic.utils.hardware import detect_preferred_device
 StageUpdate = Callable[[str], None]
 
 _GPU_CAPABLE_ALIASES = {"xgboost", "lightgbm", "catboost", "tabnet"}
+_CUDA_REQUIRED_ALIASES = {"xgboost", "catboost", "tabnet"}
 
 
 def _emit_gpu_capability_warnings(
@@ -39,15 +40,27 @@ def _emit_gpu_capability_warnings(
     cpu_only = [alias for alias in members if alias not in _GPU_CAPABLE_ALIASES]
 
     if device != "cuda":
-        emit(
-            (
-                f"[gpu-warning] candidate={candidate.name} device={device}. "
-                "CUDA not active, all training paths will run on CPU/MPS."
-            ),
-            color="yellow",
-            run_logger=run_logger,
-        )
-        return
+        cuda_required = [alias for alias in members if alias in _CUDA_REQUIRED_ALIASES]
+        if cuda_required:
+            emit(
+                (
+                    f"[gpu-warning] candidate={candidate.name} device={device}. "
+                    "CUDA-dependent backends may fall back to CPU/MPS: "
+                    + ", ".join(cuda_required)
+                    + "."
+                ),
+                color="yellow",
+                run_logger=run_logger,
+            )
+        if "lightgbm" in members:
+            emit(
+                (
+                    f"[gpu] candidate={candidate.name} lightgbm can still use OpenCL GPU "
+                    "with device='gpu' even when torch CUDA detector is unavailable."
+                ),
+                color="cyan",
+                run_logger=run_logger,
+            )
 
     if cpu_only:
         emit(
@@ -172,7 +185,8 @@ def evaluate_candidate(
             emit(
                 (
                     "[gpu-warning] System CUDA backend is unavailable. "
-                    "GPU-capable models will run on CPU/MPS backends."
+                    "CUDA-dependent models may run on CPU/MPS backends. "
+                    "LightGBM can still use OpenCL GPU with device='gpu'."
                 ),
                 color="yellow",
                 run_logger=run_logger,
