@@ -77,8 +77,13 @@ class XGBoostWrapper:
                 preferred_device = detect_preferred_device()
 
             gpu_params: dict[str, str] = {}
-            if preferred_device in ("cuda", "mps"):
-                gpu_params["device"] = preferred_device
+            if preferred_device == "cuda":
+                gpu_params["device"] = "cuda"
+                gpu_params["tree_method"] = tree_method or "hist"
+            elif preferred_device == "mps":
+                # XGBoost doesn't currently support "device": "mps" natively in its APIs, 
+                # but runs optimally on M1 as "cpu" / "hist"
+                gpu_params["device"] = "cpu"
                 gpu_params["tree_method"] = tree_method or "hist"
             elif tree_method is not None:
                 gpu_params["tree_method"] = tree_method
