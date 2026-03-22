@@ -82,7 +82,12 @@ if [ ! -f "$QUARTO_PYTHON" ]; then
 fi
 CURRENT_TIME=$(date "+%Y-%m-%d %H:%M:%S")
 FILE_TIME=$(date "+%Y-%m-%d_%H-%M-%S")
-HOSTNAME=$(hostname)
+# Try to get a clean hostname (avoiding random DNS IP names on macOS/Linux)
+if command -v scutil &> /dev/null; then
+    HOSTNAME=$(scutil --get ComputerName | tr ' ' '_')
+else
+    HOSTNAME=$(hostname | cut -d. -f1)
+fi
 
 REPORT_FILENAME="${FILE_TIME}_${HOSTNAME}.html"
 

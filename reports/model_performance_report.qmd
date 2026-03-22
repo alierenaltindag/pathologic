@@ -178,6 +178,56 @@ fig.update_layout(xaxis=dict(range=[0.5, 1.02]), yaxis=dict(range=[0.5, 1.02]))
 fig.show()
 ```
 
+
+## Sistem ve Ortam Bilgileri
+Aşağıdaki tabloda bu raporun oluşturulduğu donanım ve kütüphane versiyonları gösterilmektedir.
+
+```{python}
+#| label: session-info
+#| echo: false
+#| results: asis
+import sys
+import platform
+import os
+
+def get_version(pkg_name):
+    try:
+        from importlib.metadata import version
+        return version(pkg_name)
+    except:
+        return "Bulunamadı"
+
+packages = ["pandas", "xgboost", "lightgbm", "catboost", "plotly", "optuna", "scikit-learn"]
+pkg_versions = {pkg: get_version(pkg) for pkg in packages}
+
+try:
+    import psutil
+    ram_gb = f"{round(psutil.virtual_memory().total / (1024**3), 1)} GB"
+    cpu_cores = psutil.cpu_count(logical=True)
+except ImportError:
+    ram_gb = "Bilinmiyor"
+    cpu_cores = os.cpu_count() or "Bilinmiyor"
+
+os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
+python_info = sys.version.split(' ')[0]
+
+info_md = f"""
+| Özellik | Bilgi |
+| :--- | :--- |
+| **İşletim Sistemi** | {os_info} |
+| **İşlemci Çekirdeği** | {cpu_cores} |
+| **Sistem Belleği (RAM)** | {ram_gb} |
+| **Python Sürümü** | {python_info} |
+"""
+
+for pkg, ver in pkg_versions.items():
+    if ver != "Bulunamadı":
+        info_md += f"| **{pkg}** sürümü | {ver} |\n"
+
+display(Markdown(info_md))
+```
+
+
 ---
 
 *📝 Not: Bu rapor Quarto ve Pathologic modülleri tarafından otomatik olarak üretilmiştir.*
