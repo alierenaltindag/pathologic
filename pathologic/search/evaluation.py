@@ -16,12 +16,119 @@ from pathologic.search import artifacts as _search_artifacts
 from pathologic.search import candidate as _search_candidate
 from pathologic.search import explainability as _search_explainability
 from pathologic.search import hpo_nas as _search_hpo_nas
-from pathologic.search.logging import inner_search_runtime
+from pathologic.search.logging import emit, inner_search_runtime
 from pathologic.search.spec import BudgetProfile, CandidateSpec
 from pathologic.search.utils import parse_model_pool
+from pathologic.utils.hardware import detect_preferred_device
 
 
 StageUpdate = Callable[[str], None]
+
+_GPU_CAPABLE_ALIASES = {"xgboost", "lightgbm", "catboost", "tabnet"}
+
+
+def _emit_gpu_capability_warnings(
+    *,
+    candidate: CandidateSpec,
+    model: PathoLogic,
+    run_logger: logging.Logger,
+) -> None:
+    device = str(getattr(model, "device", "cpu")).strip().lower()
+    members = [str(alias).strip().lower() for alias in candidate.members]
+    gpu_capable = [alias for alias in members if alias in _GPU_CAPABLE_ALIASES]
+    cpu_only = [alias for alias in members if alias not in _GPU_CAPABLE_ALIASES]
+
+    if device != "cuda":
+        emit(
+            (
+                f"[gpu-warning] candidate={candidate.name} device={device}. "
+                "CUDA not active, all training paths will run on CPU/MPS."
+            ),
+            color="yellow",
+            run_logger=run_logger,
+        )
+        return
+
+    if cpu_only:
+        emit(
+            (
+                f"[gpu-warning] candidate={candidate.name} CPU-only model(s): "
+                + ", ".join(cpu_only)
+                + ". GPU acceleration is not available for these aliases in this codebase."
+            ),
+            color="yellow",
+            run_logger=run_logger,
+        )
+
+    if gpu_capable:
+        emit(
+            (
+                f"[gpu] candidate={candidate.name} GPU-capable model(s): "
+                + ", ".join(gpu_capable)
+                + "."
+            ),
+            color="cyan",
+            run_logger=run_logger,
+        )
+
+
+def _emit_gpu_runtime_backend_warnings(
+    *,
+    candidate: CandidateSpec,
+    model: PathoLogic,
+    run_logger: logging.Logger,
+) -> None:
+    trained_model = getattr(model, "_trained_model", None)
+    estimator = getattr(trained_model, "estimator", None)
+    if estimator is None:
+        return
+
+    members = [str(alias).strip().lower() for alias in candidate.members]
+
+    if "xgboost" in members:
+        try:
+            xgb_params = estimator.get_xgb_params()
+            if str(xgb_params.get("device", "")).strip().lower() != "cuda":
+                emit(
+                    (
+                        f"[gpu-warning] candidate={candidate.name} xgboost backend "
+                        "fell back to CPU."
+                    ),
+                    color="yellow",
+                    run_logger=run_logger,
+                )
+        except Exception:
+            pass
+
+    if "lightgbm" in members:
+        try:
+            lgb_params = estimator.get_params()
+            if str(lgb_params.get("device", "")).strip().lower() != "gpu":
+                emit(
+                    (
+                        f"[gpu-warning] candidate={candidate.name} lightgbm backend "
+                        "is not running with GPU (likely CPU fallback/build limitation)."
+                    ),
+                    color="yellow",
+                    run_logger=run_logger,
+                )
+        except Exception:
+            pass
+
+    if "catboost" in members:
+        try:
+            task_type = str(estimator.get_param("task_type") or "").strip().upper()
+            if task_type != "GPU":
+                emit(
+                    (
+                        f"[gpu-warning] candidate={candidate.name} catboost backend "
+                        "is not running on GPU."
+                    ),
+                    color="yellow",
+                    run_logger=run_logger,
+                )
+        except Exception:
+            pass
 
 
 def evaluate_candidate(
@@ -61,6 +168,17 @@ def evaluate_candidate(
 
     try:
         model = _search_candidate.model_for_candidate_with_hybrid_config(candidate, args)
+        if detect_preferred_device() != "cuda":
+            emit(
+                (
+                    "[gpu-warning] System CUDA backend is unavailable. "
+                    "GPU-capable models will run on CPU/MPS backends."
+                ),
+                color="yellow",
+                run_logger=run_logger,
+            )
+        _emit_gpu_capability_warnings(candidate=candidate, model=model, run_logger=run_logger)
+
         model.defaults.setdefault("data", {})["required_features"] = list(feature_columns)
         model.defaults.setdefault("data", {})["label_column"] = "label"
         model.defaults.setdefault("data", {})["gene_column"] = "gene_id"
@@ -333,6 +451,7 @@ def evaluate_candidate(
             suppress_stderr=True,
         ):
             model.train(str(outer_train_csv), **train_kwargs)
+        _emit_gpu_runtime_backend_warnings(candidate=candidate, model=model, run_logger=run_logger)
         stage_update("train", state="done")
 
         stage_update("evaluate", state="start")
