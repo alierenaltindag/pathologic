@@ -5,6 +5,8 @@ epochs: 30
 batch_size: 64
 validation_split: 0.2
 mixed_precision: false
+seed: 42
+device: auto
 
 # Terminal gorunurluk ayarlari.
 ui:
@@ -39,7 +41,7 @@ preprocess:
   # Eksik deger stratejisi. [impute/drop_rows]
   # impute: impute_strategy ile doldurur.
   # drop_rows: sayisal ozelliklerde eksik olan satirlari dusurur.
-  missing_value_policy: drop_rows
+  missing_value_policy: impute
   # Eksik değer doldurma yöntemi. [none/mean/median/most_frequent]
   # none: eksik değerleri olduğu gibi bırakır.
   impute_strategy: median
@@ -74,7 +76,7 @@ early_stopping:
   restore_best_weights: true
 
 class_imbalance:
-  enabled: false
+  enabled: true
   mode: balanced
   # Opsiyonel: pozitif sinif agirligini sabitlemek icin kullanilir.
   positive_class_weight:

@@ -50,7 +50,7 @@ search:
   # Blending icin holdout orani.
   hybrid_blend_size: 0.2
   # Hibrit kombinasyonlardaki maksimum model sayisi
-  max_hybrid_combination_size: 3
+  max_hybrid_combination_size: 4
   # Hibrit strateji ve stratejiye ozel parametre tuning alanini aktif eder.
   # true oldugunda strategy + meta_model_alias da HPO/NAS aramasina dahil edilir.
   hybrid_tune_strategy_and_params: true
@@ -119,13 +119,25 @@ search:
 # Veri şeması ve zorunlu alanlarla ilgili ayarları içerir.
 data:
   # Hedef etiket sütununun adını belirtir.
-  label_column: label
+  label_column: Target
   # Gen kimliğini tutan ve group-based split için kullanılan sütunu belirtir.
-  gene_column: gene_id
+  gene_column: Gene(s)
   # Model egitimi oncesinde veri setinde bulunmasi zorunlu ozellikleri listeler.
   required_features:
-    - revel_score
-    - cadd_phred
+    - cadd.phred
+    - REVEL_Score
+    - dbnsfp.sift.score
+    - GERP_Score
+    - gnomAD_AF
+    - BLOSUM_Score
+    - Charge_Change
+    - Polarity_Change
+    - Hyd_Delta
+    - MW_Delta
+    - Grantham_Score
+    - Shannon_Entropy
+    - Local_Hydrophobicity
+    - Prolin_Cysteine_Count
   # Model/member bazli feature yonlendirme (opsiyonel).
   # single: tek model alias -> feature listesi
   # hybrid: hibrit alias -> members -> alias -> feature listesi
@@ -170,6 +182,8 @@ data:
     - Veri_Kaynagi_Paneli
     - Protein change
     - Gene(s)
+    - Ref_AA
+    - Alt_AA
 
 # Eğitim/test/tune ayarları modüler dosyalardan yüklenir.
 train: runtime/train.yaml

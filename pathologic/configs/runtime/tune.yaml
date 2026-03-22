@@ -3,6 +3,8 @@
 
 # HPO motoru. [grid/random/optuna]
 engine: random
+seed: 42
+device: auto
 
 # Toplam deneme sayısı.
 n_trials: 20
@@ -11,7 +13,7 @@ n_trials: 20
 max_trials: 20
 
 # Optimizasyon hedef metriği.
-objective: roc_auc
+objective: f1
 
 # Zaman limiti (dakika).
 timeout_minutes: 60
@@ -23,13 +25,16 @@ early_stopping:
   min_improvement: 0.0
 
 class_imbalance:
-  enabled: false
+  enabled: true
   mode: balanced
   positive_class_weight:
 
 # Opsiyonel tune-time preprocess override bloklari.
 # Bos birakildiginda train.preprocess varsayimlari kullanilir.
 preprocess:
+  missing_value_policy: impute
+  impute_strategy: median
+  add_missing_indicators: false
   tabnet_missingness_mode: auto
   tabnet_missing_indicator_features:
     - feature__GERP_Score
