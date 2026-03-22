@@ -26,3 +26,12 @@ class_imbalance:
   enabled: false
   mode: balanced
   positive_class_weight:
+
+# Opsiyonel tune-time preprocess override bloklari.
+# Bos birakildiginda train.preprocess varsayimlari kullanilir.
+preprocess:
+  tabnet_missingness_mode: auto
+  tabnet_missing_indicator_features:
+    - feature__GERP_Score
+    - GERP_Score
+  tabnet_impute_strategy: median

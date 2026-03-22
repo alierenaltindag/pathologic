@@ -217,6 +217,10 @@ class PathoLogic:
             dataset_columns=dataset.columns,
             gene_column=gene_column,
         )
+        preprocess_config = self._apply_tabnet_missingness_policy(
+            preprocess_config=preprocess_config,
+            active_features=active_features,
+        )
 
         validate_schema(
             dataset,
@@ -350,7 +354,11 @@ class PathoLogic:
             ),
         )
         processed = processor.fit_transform(dataset)
-        x = processed[active_features].to_numpy(dtype=float)
+        training_feature_columns = self._augment_feature_columns_with_missing_indicators(
+            base_features=active_features,
+            processor=processor,
+        )
+        x = processed[training_feature_columns].to_numpy(dtype=float)
         y = processed[label_column].to_numpy(dtype=int)
 
         model_params = self._with_runtime_model_params(
@@ -401,7 +409,7 @@ class PathoLogic:
 
         self._trained_model = train_result.model
         self._preprocessor = processor
-        self._feature_columns = active_features
+        self._feature_columns = training_feature_columns
         self._explain_background = np.asarray(x_train, dtype=float)
         self.last_train_metrics = dict(train_result.metrics)
         self.is_trained = True
@@ -569,6 +577,10 @@ class PathoLogic:
             dataset_columns=dataset.columns,
             gene_column=gene_column,
         )
+        preprocess_config = self._apply_tabnet_missingness_policy(
+            preprocess_config=preprocess_config,
+            active_features=active_features,
+        )
         (
             missing_value_policy_raw,
             impute_strategy_raw,
@@ -688,9 +700,14 @@ class PathoLogic:
                     train_processed = processor.fit_transform(train_df)
                     val_processed = processor.transform(val_df)
 
-                    x_train = train_processed[active_features].to_numpy(dtype=float)
+                    fold_feature_columns = self._augment_feature_columns_with_missing_indicators(
+                        base_features=active_features,
+                        processor=processor,
+                    )
+
+                    x_train = train_processed[fold_feature_columns].to_numpy(dtype=float)
                     y_train = train_processed[label_column].to_numpy(dtype=int)
-                    x_val = val_processed[active_features].to_numpy(dtype=float)
+                    x_val = val_processed[fold_feature_columns].to_numpy(dtype=float)
                     y_val = val_processed[label_column].to_numpy(dtype=int)
 
                     if len(x_train) == 0 or len(x_val) == 0:
@@ -1354,6 +1371,88 @@ class PathoLogic:
     ) -> tuple[str, str, str]:
         """Validate preprocess options and return normalized strategy names."""
         return validate_preprocess_options(preprocess_config)
+
+    def _apply_tabnet_missingness_policy(
+        self,
+        *,
+        preprocess_config: dict[str, Any],
+        active_features: list[str],
+    ) -> dict[str, Any]:
+        """Apply optional TabNet-specific missingness defaults.
+
+        TabNet does not reliably handle NaN features. In auto mode we enforce
+        imputation and add configured missing-indicator features.
+        """
+        resolved = dict(preprocess_config)
+        if self.model_name != "tabnet":
+            return resolved
+
+        mode = str(resolved.get("tabnet_missingness_mode", "auto")).strip().lower()
+        if mode == "off":
+            return resolved
+
+        configured_indicator_raw = resolved.get(
+            "tabnet_missing_indicator_features",
+            ["feature__GERP_Score", "GERP_Score"],
+        )
+        configured_indicator = (
+            [str(value) for value in configured_indicator_raw if str(value)]
+            if isinstance(configured_indicator_raw, list)
+            else []
+        )
+        available = set(active_features)
+        preferred_indicator_features = [
+            feature
+            for feature in configured_indicator
+            if feature in available
+        ]
+
+        if mode == "manual":
+            if (
+                bool(resolved.get("add_missing_indicators", False))
+                and "missing_indicator_features" not in resolved
+                and preferred_indicator_features
+            ):
+                resolved["missing_indicator_features"] = preferred_indicator_features
+            return resolved
+
+        # mode=auto
+        resolved["missing_value_policy"] = "impute"
+        auto_impute = str(
+            resolved.get(
+                "tabnet_impute_strategy",
+                resolved.get("impute_strategy", "median"),
+            )
+        ).strip().lower()
+        resolved["impute_strategy"] = auto_impute
+        resolved["add_missing_indicators"] = True
+
+        existing_indicator_raw = resolved.get("missing_indicator_features")
+        existing_indicator = (
+            [str(value) for value in existing_indicator_raw if str(value)]
+            if isinstance(existing_indicator_raw, list)
+            else []
+        )
+        merged_indicator = list(dict.fromkeys([*existing_indicator, *preferred_indicator_features]))
+        resolved["missing_indicator_features"] = [
+            feature
+            for feature in merged_indicator
+            if feature in available
+        ]
+        return resolved
+
+    @staticmethod
+    def _augment_feature_columns_with_missing_indicators(
+        *,
+        base_features: list[str],
+        processor: FoldPreprocessor,
+    ) -> list[str]:
+        """Append generated missing-indicator columns to model feature list."""
+        augmented = list(base_features)
+        for feature in processor.resolved_missing_indicator_features:
+            if feature not in augmented:
+                augmented.append(feature)
+        return augmented
 
     def _with_device_model_params(self, model_params: dict[str, Any]) -> dict[str, Any]:
         """Attach GPU-oriented model params when CUDA is available and supported."""

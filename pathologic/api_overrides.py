@@ -36,6 +36,9 @@ class PreprocessOverrides(TypedDict, total=False):
     scaler_features: list[str]
     add_missing_indicators: bool
     missing_indicator_features: list[str]
+    tabnet_missingness_mode: str
+    tabnet_missing_indicator_features: list[str]
+    tabnet_impute_strategy: str
 
 
 class EarlyStoppingOverrides(TypedDict, total=False):

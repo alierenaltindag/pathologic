@@ -68,6 +68,11 @@ class FoldPreprocessor:
         self._resolve_feature_scopes()
         self._validate_missing_value_policy()
 
+    @property
+    def resolved_missing_indicator_features(self) -> list[str]:
+        """Return generated missing-indicator feature names after fit."""
+        return list(self._missing_indicator_features)
+
     def fit(self, train_df: pd.DataFrame) -> FoldPreprocessor:
         fit_df = self._prepare_input_frame(train_df, require_non_empty=True)
         self._fit_missing_indicators(fit_df)

@@ -53,6 +53,18 @@ preprocess:
   add_missing_indicators: false
   # Indicator uretimi icin ozellik alt kumesi. null ise tum sayisal ozellikler.
   missing_indicator_features:
+  # TabNet icin eksik deger stratejisi. [auto/off/manual]
+  # auto: NaN sorunu yasamamak icin impute + missing indicator zorlar.
+  # off: global preprocess ayarlarina dokunmaz.
+  # manual: preprocess.* ayarlarini oldugu gibi kullanir.
+  tabnet_missingness_mode: auto
+  # TabNet auto modunda missing indicator uretilecek oncelikli ozellikler.
+  # Not: Bu liste aktif feature setiyle kesisen kolonlar icin uygulanir.
+  tabnet_missing_indicator_features:
+    - feature__GERP_Score
+    - GERP_Score
+  # TabNet auto modunda kullanilacak imputation stratejisi.
+  tabnet_impute_strategy: median
 
 early_stopping:
   enabled: false

@@ -364,6 +364,35 @@ def validate_preprocess_options(preprocess_config: dict[str, Any]) -> tuple[str,
             "Config field 'preprocess.missing_indicator_features' must be a list."
         )
 
+    tabnet_missingness_mode = preprocess_config.get("tabnet_missingness_mode")
+    if tabnet_missingness_mode is not None:
+        mode = str(tabnet_missingness_mode).strip().lower()
+        if mode not in {"auto", "off", "manual"}:
+            raise ValueError(
+                "Config field 'preprocess.tabnet_missingness_mode' must be one of: "
+                "auto, off, manual"
+            )
+
+    tabnet_missing_indicator_features = preprocess_config.get(
+        "tabnet_missing_indicator_features"
+    )
+    if tabnet_missing_indicator_features is not None and not isinstance(
+        tabnet_missing_indicator_features,
+        list,
+    ):
+        raise ValueError(
+            "Config field 'preprocess.tabnet_missing_indicator_features' must be a list."
+        )
+
+    tabnet_impute_strategy = preprocess_config.get("tabnet_impute_strategy")
+    if tabnet_impute_strategy is not None:
+        strategy = str(tabnet_impute_strategy).strip().lower()
+        if strategy not in allowed_imputers:
+            raise ValueError(
+                "Config field 'preprocess.tabnet_impute_strategy' must be one of: "
+                + ", ".join(sorted(allowed_imputers))
+            )
+
     return missing_value_policy_raw, impute_strategy_raw, scaler_raw
 
 
