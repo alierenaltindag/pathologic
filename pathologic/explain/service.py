@@ -79,6 +79,7 @@ class ExplainabilityService:
             dataset=dataset,
             group_columns=resolved_group_columns,
         )
+
         member_explainability = self._build_member_explainability(
             model=model,
             feature_names=feature_names,

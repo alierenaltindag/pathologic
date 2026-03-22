@@ -164,10 +164,12 @@ def test_visualizer_generates_html_document() -> None:
     assert "<html>" in html
     assert "PathoLogic Explainability Report" in html
     assert "Yontem Ozeti (Turkce)" in html
-    assert "false_positive_rate / overall_false_positive_rate" in html
     assert "revel_score" in html
     assert "relative_strength" in html
     assert "cards" in html
+    assert "False-Positive Hotspots" not in html
+    assert "Hata Analizi Desenleri" not in html
+    assert "false_positive_rate / overall_false_positive_rate" not in html
 
 
 def test_visualizer_handles_heterogeneous_hotspot_columns() -> None:
@@ -206,9 +208,10 @@ def test_visualizer_handles_heterogeneous_hotspot_columns() -> None:
 
     html = ExplainabilityVisualizer().render_html(report)
 
-    assert "<th>gene_id</th>" in html
-    assert "<th>Protein change</th>" in html
-    assert "A1708E" in html
+    assert "False-Positive Hotspots" not in html
+    assert "<th>gene_id</th>" not in html
+    assert "<th>Protein change</th>" not in html
+    assert "A1708E" not in html
 
 
 def test_visualizer_renders_member_explainability_section() -> None:

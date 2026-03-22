@@ -3,12 +3,74 @@
 from __future__ import annotations
 
 from html import escape
+from pathlib import Path
+from typing import Any
 
 from pathologic.explain.schemas import ExplainabilityReport, FeatureAttribution, SampleExplanation
 
 
 class ExplainabilityVisualizer:
     """Render explainability reports into lightweight HTML for auditing."""
+
+    def render_error_report_html(self, results: dict[str, Any], output_path: str) -> str:
+        """Renders a standalone error analysis report."""
+        patterns = results.get("summary", {}).get("pattern_concentration", {}) or results.get("pattern_concentration", {})
+        biological = results.get("summary", {}).get("biological_context", []) or results.get("biological_context", [])
+        artifacts = results.get("artifacts", {}) if isinstance(results.get("artifacts"), dict) else {}
+        plot_file = (
+            results.get("summary", {}).get("surrogate_tree", {}).get("plot_file")
+            or "surrogate_error_tree.png"
+        )
+        
+        # Build the HTML
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f4f7f6; }}
+                h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
+                h2 {{ color: #2980b9; margin-top: 30px; }}
+                .card {{ background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #eee; }}
+                th {{ background-color: #f8f9fa; color: #2c3e50; font-weight: 600; }}
+                tr:hover {{ background-color: #f1f1f1; }}
+                .error-type-fn {{ color: #e74c3c; font-weight: bold; }}
+                .error-type-fp {{ color: #e67e22; font-weight: bold; }}
+                .img-container {{ text-align: center; margin: 20px 0; }}
+                img {{ max-width: 100%; border-radius: 8px; border: 1px solid #ddd; }}
+            </style>
+        </head>
+        <body>
+            <h1>PathoLogic Hata Analiz Raporu</h1>
+            <p>Bu rapor, modelin yanlış tahmin yaptığı varyantlar üzerindeki sistematik desenleri incelemektedir.</p>
+            
+            {self._render_pattern_analysis(patterns)}
+            
+            <div class='card'>
+                <h2>Hata Karar Agaci (Surrogate Tree)</h2>
+                <p>Aşağıdaki karar ağacı, modelin FP (False Positive) ve FN (False Negative) hataları arasındaki ayrımı hangi özelliklere dayanarak yaptığını gösterir.</p>
+                <div class='img-container'>
+                    <img src='{escape(str(plot_file))}' alt='Error Decision Tree'>
+                </div>
+                <p><i>Not: Agacın sol dalları düşük değerleri, sağ dalları yüksek değerleri temsil eder. Renk derinliği hata türünün yoğunluğunu belirtir (Turuncu: FP, Mavi: FN).</i></p>
+            </div>
+            
+            <div class='card'>
+                <h2>Biyolojik Baglam (Gene/Family/Domain)</h2>
+                <p>Hata yapan varyantların protein aileleri ve domainleri bazlı dağılımı:</p>
+                {self._render_error_analysis(biological)}
+            </div>
+
+            {self._render_error_image_gallery(artifacts, fallback_tree=plot_file)}
+        </body>
+        </html>
+        """
+        
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+            
+        return output_path
 
     def render_html(self, report: ExplainabilityReport) -> str:
         max_global_abs = max(
@@ -29,7 +91,6 @@ class ExplainabilityVisualizer:
             ("backend", escape(report.backend)),
             ("global_features", str(len(report.global_feature_importance))),
             ("sample_explanations", str(len(report.sample_explanations))),
-            ("fp_hotspots", str(len(report.false_positive_hotspots))),
         ]
         summary_cards = (
             "<div class='cards'>"
@@ -43,17 +104,6 @@ class ExplainabilityVisualizer:
                 for label, value in summary_items
             )
             + "</div>"
-        )
-
-        hotspot_columns = self._resolve_hotspot_columns(report.false_positive_hotspots)
-        hotspot_rows = "".join(
-            "<tr>" + self._render_hotspot_cells(item, hotspot_columns) + "</tr>"
-            for item in report.false_positive_hotspots
-        )
-
-        hotspot_headers = "".join(
-            f"<th>{escape(str(key))}</th>"
-            for key in hotspot_columns
         )
 
         member_section = self._render_member_explainability(report.member_explainability)
@@ -101,12 +151,6 @@ class ExplainabilityVisualizer:
             f"{member_section}"
             "<h2>Sample Explanations</h2>"
             f"{sample_blocks}"
-            "<h2>False-Positive Hotspots</h2>"
-            "<table><thead><tr>"
-            f"{hotspot_headers}"
-            "</tr></thead><tbody>"
-            f"{hotspot_rows}"
-            "</tbody></table>"
             "<h2>Metadata</h2>"
             "<table><thead><tr><th>key</th><th>value</th></tr></thead><tbody>"
             f"{metadata_rows}"
@@ -139,9 +183,7 @@ class ExplainabilityVisualizer:
             f"yapilir (top_k_features={top_k_features}).</li>",
             f"<li>Ornek bazli aciklamada her satir icin en etkili ozellikler listelenir "
             f"(top_k_samples={top_k_samples}).</li>",
-            "<li>False-positive hotspot analizi, grup bazli false_positive_rate / "
-            "overall_false_positive_rate risk oranini raporlar.</li>",
-            f"<li>Hotspot grup kolonlari: {escape(group_columns)}.</li>",
+            f"<li>Analiz grup kolonlari: {escape(group_columns)}.</li>",
             f"<li>Bu kosu icin backend policy: {backend_policy}.</li>",
         ]
         return "<div class='card'><ul>" + "".join(lines) + "</ul></div>"
@@ -298,3 +340,151 @@ class ExplainabilityVisualizer:
             f"{top_features_html}"
             "</ul></div></div>"
         )
+
+    @staticmethod
+    def _render_error_analysis(errors: list[dict[str, Any]]) -> str:
+        """Render biological context errors."""
+        if not errors:
+            return "<p>No systematic biological context errors detected.</p>"
+        
+        # Priority columns for biological context
+        columns = ["gene_id", "protein_family", "domain_id", "fp_count", "fn_count", "total_errors"]
+        
+        # Discover any other columns
+        all_keys = set()
+        for err in errors:
+            all_keys.update(err.keys())
+        
+        ordered_cols = [c for c in columns if c in all_keys]
+        remaining = sorted([c for c in all_keys if c not in columns])
+        final_cols = ordered_cols + remaining
+        
+        headers = "".join(f"<th>{escape(str(c))}</th>" for c in final_cols)
+        rows = ""
+        for err in errors:
+            cells = "".join(f"<td>{escape(str(err.get(c, '')))}</td>" for c in final_cols)
+            rows += f"<tr>{cells}</tr>"
+            
+        return f"<table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"
+
+    @staticmethod
+    def _render_pattern_analysis(patterns: dict[str, Any] | None) -> str:
+        if not patterns:
+            return ""
+
+        sections: list[str] = []
+
+        # Global stats
+        if "error_type_distribution" in patterns:
+            dist = patterns["error_type_distribution"]
+            sections.append(
+                "<div class='card'>"
+                "<h3>Hata Turu Dagilimi</h3>"
+                f"<div><strong>Toplam Hata:</strong> {dist['total']}</div>"
+                f"<div><strong>False Positive (FP):</strong> {dist['fp']} (Benign varyantın Pathogenic tahmin edilmesi)</div>"
+                f"<div><strong>False Negative (FN):</strong> {dist['fn']} (Pathogenic varyantın Benign tahmin edilmesi)</div>"
+                "</div>"
+            )
+
+        # 1. Population Frequency
+        if "population_frequency" in patterns:
+            af_rows = ""
+            for k, v in patterns["population_frequency"].items():
+                if isinstance(v, dict):
+                    af_rows += f"<tr><td>{escape(str(k))}</td><td>{v['fp']}</td><td>{v['fn']}</td><td>{v['total']}</td></tr>"
+                else: 
+                   af_rows += f"<tr><td>{escape(str(k))}</td><td colspan='3'>{int(v)}</td></tr>"
+            
+            sections.append(
+                "<div class='card'>"
+                "<h3>Populasyon Sikligi (gnomAD_AF) Bazlı Hata Analizi</h3>"
+                "<table><thead><tr><th>Frekans Araligi</th><th>FP Sayısı</th><th>FN Sayısı</th><th>Toplam Hata</th></tr></thead>"
+                f"<tbody>{af_rows}</tbody></table></div>"
+            )
+
+        # 2. In-Silico Conflicts
+        if "insilico_conflicts" in patterns:
+            conf = patterns["insilico_conflicts"]
+            conf_rows = ""
+            for scenario, stats in conf.items():
+                label = "REVEL High (>0.5) / CADD Low (<15)" if scenario == "revel_high_cadd_low" else "REVEL Low (<0.2) / CADD High (>25)"
+                if isinstance(stats, dict):
+                    conf_rows += f"<tr><td>{label}</td><td>{stats['fp']}</td><td>{stats['fn']}</td><td>{stats['total']}</td></tr>"
+                else:
+                    conf_rows += f"<tr><td>{label}</td><td colspan='3'>{int(stats)}</td></tr>"
+
+            sections.append(
+                "<div class='card'>"
+                "<h3>In-Silico Skor Celiskileri Bazlı Hata Analizi</h3>"
+                "<table><thead><tr><th>Senaryo</th><th>FP Sayısı</th><th>FN Sayısı</th><th>Toplam Hata</th></tr></thead>"
+                f"<tbody>{conf_rows}</tbody></table></div>"
+            )
+
+        # 3. Biochemical Patterns
+        if "biochemical_patterns" in patterns:
+            bio = patterns["biochemical_patterns"]
+            bio_rows = ""
+            for category, pattern_stats in bio.items():
+                for label, stats in pattern_stats.items():
+                    if isinstance(stats, dict):
+                        bio_rows += f"<tr><td>{escape(category.capitalize())}</td><td>{escape(str(label))}</td><td>{stats['fp']}</td><td>{stats['fn']}</td><td>{stats['total']}</td></tr>"
+                    else:
+                        bio_rows += f"<tr><td>{escape(category.capitalize())}</td><td>{escape(str(label))}</td><td colspan='3'>{int(stats)}</td></tr>"
+            
+            sections.append(
+                "<div class='card'>"
+                "<h3>Biyokimyasal Degisim Desenleri Bazlı Hata Analizi</h3>"
+                "<table><thead><tr><th>Kategori</th><th>Desen</th><th>FP Sayısı</th><th>FN Sayısı</th><th>Toplam Hata</th></tr></thead>"
+                f"<tbody>{bio_rows}</tbody></table></div>"
+            )
+
+        if not sections:
+            return ""
+
+        return "<h2>Hata Analizi Desenleri (Pattern Concentration Analysis)</h2>" + "".join(sections)
+
+    @staticmethod
+    def _render_error_image_gallery(artifacts: dict[str, Any], *, fallback_tree: str) -> str:
+        if not artifacts:
+            return ""
+
+        ordered_keys = [
+            "surrogate_tree_plot_png",
+            "surrogate_tree_shap_png",
+            "errors_tsne_kmeans_png",
+            "errors_tsne_dbscan_png",
+            "errors_umap_kmeans_png",
+            "errors_umap_dbscan_png",
+        ]
+        seen: set[str] = set()
+        rows: list[str] = []
+
+        for key in ordered_keys:
+            value = artifacts.get(key)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            filename = Path(value).name
+            if filename in seen:
+                continue
+            seen.add(filename)
+            rows.append(
+                "<div class='card'>"
+                f"<h3>{escape(filename)}</h3>"
+                "<div class='img-container'>"
+                f"<img src='{escape(filename)}' alt='{escape(filename)}'>"
+                "</div></div>"
+            )
+
+        if fallback_tree and fallback_tree not in seen:
+            rows.insert(
+                0,
+                "<div class='card'>"
+                f"<h3>{escape(str(fallback_tree))}</h3>"
+                "<div class='img-container'>"
+                f"<img src='{escape(str(fallback_tree))}' alt='{escape(str(fallback_tree))}'>"
+                "</div></div>",
+            )
+
+        if not rows:
+            return ""
+        return "<h2>Hata Analizi Gorselleri</h2>" + "".join(rows)

@@ -97,3 +97,81 @@ def test_error_analysis_returns_cluster_summary_when_errors_exist(tmp_path: Path
         assert "kmeans_profiles" in clustering
         assert "dbscan_profiles" in clustering
         assert "kmeans_cluster_profiles_csv" in result.artifacts
+
+def test_pattern_concentration_analysis_logic() -> None:
+    dataset = pd.DataFrame({
+        "feature__gnomAD_AF": [0.00001, 0.005, 0.5, 0.0000001],
+        "feature__REVEL_Score": [0.9, 0.1, 0.7, 0.2],
+        "feature__cadd.phred": [10.0, 30.0, 5.0, 35.0],
+        "feature__Charge_Change": [1, -1, 0, 0],
+        "feature__Polarity_Change": [1, -1, 0, 1],
+        "feature__Hyd_Delta": [1.5, -2, 0.5, 0],
+        "label": [1, 0, 1, 0]
+    })
+    
+    # 4 errors: 2 FPs, 2 FNs
+    y_true = np.array([1, 0, 1, 0])
+    y_pred = np.array([0, 1, 0, 1]) # All wrong
+    y_score = np.array([0.2, 0.8, 0.2, 0.8])
+    
+    analyzer = MultiDimensionalErrorAnalyzer(random_state=42)
+    error_frame = analyzer._build_error_frame(
+        y_true=y_true, y_pred=y_pred, y_score=y_score,
+        dataset=dataset, numeric_columns=analyzer._resolve_numeric_columns(dataset)
+    )
+    
+    patterns = analyzer._analyze_pattern_concentration(error_frame)
+    
+    # Check frequency bins
+    assert "population_frequency" in patterns
+    freqs = patterns["population_frequency"]
+    assert freqs["Rare (<0.01%)"]["total"] == 2
+    assert freqs["Low Freq (0.01-1%)"]["total"] == 1
+    assert freqs["Common (>1%)"]["total"] == 1
+    
+    # Check conflicts
+    # Row 0: REVEL 0.9, CADD 10 -> revel_high_cadd_low
+    # Row 1: REVEL 0.1, CADD 30 -> revel_low_cadd_high
+    # Row 2: REVEL 0.7, CADD 5 -> revel_high_cadd_low
+    # Row 3: REVEL 0.2, CADD 35 -> revel_low_cadd_high
+    assert patterns["insilico_conflicts"]["revel_high_cadd_low"]["total"] == 2
+    assert patterns["insilico_conflicts"]["revel_low_cadd_high"]["total"] == 2
+    
+    # Check biochemical
+    bio = patterns["biochemical_patterns"]
+    assert bio["charge"]["Gain of Positive"]["total"] == 1
+    assert bio["charge"]["Loss of Positive"]["total"] == 1
+    assert bio["polarity"]["Increase"]["total"] == 2
+    assert bio["hydropathy"]["More Hydrophobic"]["total"] == 1
+    assert bio["hydropathy"]["More Hydrophilic"]["total"] == 1
+
+
+def test_population_frequency_handles_scaled_inputs_without_dropping_rows() -> None:
+    dataset = pd.DataFrame(
+        {
+            "feature__gnomAD_AF": [-1.3, -0.8, -0.2, 0.1, 0.5, 1.2],
+            "feature__REVEL_Score": [0.2, 0.4, 0.1, 0.8, 0.3, 0.7],
+            "feature__cadd.phred": [12.0, 14.0, 8.0, 22.0, 18.0, 25.0],
+            "label": [0, 1, 0, 1, 0, 1],
+        }
+    )
+    y_true = np.array([0, 1, 0, 1, 0, 1], dtype=int)
+    y_pred = np.array([1, 0, 1, 0, 1, 0], dtype=int)
+    y_score = np.array([0.8, 0.2, 0.7, 0.3, 0.9, 0.1], dtype=float)
+
+    analyzer = MultiDimensionalErrorAnalyzer(random_state=42)
+    error_frame = analyzer._build_error_frame(
+        y_true=y_true,
+        y_pred=y_pred,
+        y_score=y_score,
+        dataset=dataset,
+        numeric_columns=analyzer._resolve_numeric_columns(dataset),
+    )
+    patterns = analyzer._analyze_pattern_concentration(error_frame)
+
+    freq = patterns["population_frequency"]
+    total_from_bins = sum(int(stats["total"]) for stats in freq.values())
+    assert total_from_bins == int(len(error_frame))
+    assert "Low (Relative AF)" in freq
+    assert "Mid (Relative AF)" in freq
+    assert "High (Relative AF)" in freq

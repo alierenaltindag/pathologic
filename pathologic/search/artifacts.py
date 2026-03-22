@@ -12,6 +12,7 @@ import pandas as pd
 
 from pathologic import PathoLogic
 from pathologic.explain.error_analysis import MultiDimensionalErrorAnalyzer
+from pathologic.explain.visualizer import ExplainabilityVisualizer
 from pathologic.utils.calibration import (
     apply_beta_scaling,
     apply_platt_scaling,
@@ -103,6 +104,12 @@ def compute_candidate_error_analysis_artifacts(
         output_dir=error_dir,
         detailed=detailed,
     )
+    
+    # Render standalone HTML report
+    visualizer = ExplainabilityVisualizer()
+    report_path = error_dir / "error_analysis_report.html"
+    visualizer.render_error_report_html(result.to_dict(), str(report_path))
+    
     return result.to_dict()
 
 

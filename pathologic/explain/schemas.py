@@ -54,6 +54,7 @@ class ExplainabilityReport:
     false_positive_hotspots: list[dict[str, float | int | str]]
     metadata: dict[str, Any]
     member_explainability: dict[str, Any] | None = None
+    pattern_concentration: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
@@ -67,4 +68,6 @@ class ExplainabilityReport:
         }
         if self.member_explainability is not None:
             payload["member_explainability"] = dict(self.member_explainability)
+        if self.pattern_concentration is not None:
+            payload["pattern_concentration"] = dict(self.pattern_concentration)
         return payload

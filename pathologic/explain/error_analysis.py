@@ -156,8 +156,10 @@ class MultiDimensionalErrorAnalyzer:
 
         x_raw = error_frame[feature_columns]
         x_imputed = SimpleImputer(strategy="median").fit_transform(x_raw)
+        # y mapping: 1 for FP (predicted Pathogenic when Benign), 0 for FN (predicted Benign when Pathogenic)
         y = (error_frame["error_type"] == "FP").to_numpy(dtype=int)
         unique_labels = np.unique(y)
+
         if unique_labels.size < 2:
             return {
                 "status": "skipped",
@@ -339,7 +341,6 @@ class MultiDimensionalErrorAnalyzer:
 
     @staticmethod
     def _cluster_profiles(
-        *,
         frame: pd.DataFrame,
         cluster_column: str,
         numeric_columns: list[str],
@@ -379,16 +380,217 @@ class MultiDimensionalErrorAnalyzer:
         profiles.sort(key=lambda item: int(item.get("sample_count", 0)), reverse=True)
         return profiles
 
+    def _map_biochemical_patterns(self, error_frame: pd.DataFrame) -> pd.DataFrame:
+        """Map raw biochemical deltas to categorical labels."""
+        work = error_frame.copy()
+
+        # Charge Pattern
+        col_charge = self._resolve_feature_column(work, "Charge_Change")
+        if col_charge:
+            work["pattern__charge"] = "No Change"
+            work.loc[work[col_charge] > 0, "pattern__charge"] = "Gain of Positive"
+            work.loc[work[col_charge] < 0, "pattern__charge"] = "Loss of Positive"
+
+        # Polarity Pattern
+        col_polarity = self._resolve_feature_column(work, "Polarity_Change")
+        if col_polarity:
+            work["pattern__polarity"] = "Neutral"
+            work.loc[work[col_polarity] > 0, "pattern__polarity"] = "Increase"
+            work.loc[work[col_polarity] < 0, "pattern__polarity"] = "Decrease"
+
+        # Hydropathy Pattern
+        col_hyd = self._resolve_feature_column(work, "Hyd_Delta")
+        if col_hyd:
+            work["pattern__hydropathy"] = "Stable"
+            work.loc[work[col_hyd] > 0.5, "pattern__hydropathy"] = "More Hydrophobic"
+            work.loc[work[col_hyd] < -0.5, "pattern__hydropathy"] = "More Hydrophilic"
+
+        return work
+
+    def _analyze_pattern_concentration(self, error_frame: pd.DataFrame) -> dict[str, Any]:
+        """Analyze concentration of errors in specific feature bins."""
+        results: dict[str, Any] = {}
+
+        # 0. Global Error Statistics
+        counts = error_frame["error_type"].value_counts().to_dict()
+        results["error_type_distribution"] = {
+            "fp": int(counts.get("FP", 0)),
+            "fn": int(counts.get("FN", 0)),
+            "total": int(len(error_frame))
+        }
+
+        # 1. Population Frequency (gnomAD_AF)
+        col_af = self._resolve_feature_column(error_frame, "gnomAD_AF")
+        if col_af:
+            af_vals = pd.to_numeric(error_frame[col_af], errors="coerce")
+            non_null = af_vals.dropna()
+            freq_stats: dict[str, dict[str, int]] = {}
+
+            def _append_bucket(mask: pd.Series, label: str) -> None:
+                subset = error_frame[mask]
+                if subset.empty:
+                    freq_stats[label] = {"fp": 0, "fn": 0, "total": 0}
+                    return
+                s_counts = subset["error_type"].value_counts().to_dict()
+                freq_stats[label] = {
+                    "fp": int(s_counts.get("FP", 0)),
+                    "fn": int(s_counts.get("FN", 0)),
+                    "total": int(len(subset)),
+                }
+
+            if non_null.empty:
+                freq_stats = {
+                    "Missing/Unusable": {
+                        "fp": int((error_frame["error_type"] == "FP").sum()),
+                        "fn": int((error_frame["error_type"] == "FN").sum()),
+                        "total": int(len(error_frame)),
+                    }
+                }
+            else:
+                # If AF is already probability-like [0, 1], use biological bins.
+                is_probability_like = bool(((non_null >= 0.0) & (non_null <= 1.0)).all())
+                if is_probability_like:
+                    _append_bucket((af_vals >= 0.0) & (af_vals < 0.0001), "Rare (<0.01%)")
+                    _append_bucket((af_vals >= 0.0001) & (af_vals < 0.01), "Low Freq (0.01-1%)")
+                    _append_bucket(af_vals >= 0.01, "Common (>1%)")
+                    _append_bucket(af_vals.isna() | (af_vals < 0.0), "Missing/Invalid")
+                else:
+                    # Fallback for transformed/scaled AF values.
+                    ranks = non_null.rank(method="average", pct=True)
+                    low_index = ranks[ranks <= 1.0 / 3.0].index
+                    mid_index = ranks[(ranks > 1.0 / 3.0) & (ranks <= 2.0 / 3.0)].index
+                    high_index = ranks[ranks > 2.0 / 3.0].index
+
+                    _append_bucket(error_frame.index.isin(low_index), "Low (Relative AF)")
+                    _append_bucket(error_frame.index.isin(mid_index), "Mid (Relative AF)")
+                    _append_bucket(error_frame.index.isin(high_index), "High (Relative AF)")
+                    _append_bucket(af_vals.isna(), "Missing/Invalid")
+
+            results["population_frequency"] = freq_stats
+
+        # 2. In-Silico Conflicts (REVEL vs CADD)
+        col_revel = self._resolve_feature_column(error_frame, "REVEL_Score")
+        col_cadd = self._resolve_feature_column(error_frame, "cadd.phred")
+        if col_revel and col_cadd:
+            revel = pd.to_numeric(error_frame[col_revel], errors="coerce")
+            cadd = pd.to_numeric(error_frame[col_cadd], errors="coerce")
+
+            # Definitions: REVEL Pathogenic > 0.5, CADD Pathogenic > 20
+            mask_conflict_1 = (revel > 0.5) & (cadd < 15)  # REVEL says Path, CADD says Benign
+            mask_conflict_2 = (revel < 0.25) & (cadd > 25) # REVEL says Benign, CADD says Path
+
+            conflict_stats = {}
+            for scenario, mask in [("revel_high_cadd_low", mask_conflict_1), ("revel_low_cadd_high", mask_conflict_2)]:
+                subset = error_frame[mask]
+                if subset.empty:
+                    conflict_stats[scenario] = {"fp": 0, "fn": 0, "total": 0}
+                    continue
+                s_counts = subset["error_type"].value_counts().to_dict()
+                conflict_stats[scenario] = {
+                    "fp": int(s_counts.get("FP", 0)),
+                    "fn": int(s_counts.get("FN", 0)),
+                    "total": int(len(subset))
+                }
+            results["insilico_conflicts"] = conflict_stats
+
+        # 3. Biochemical Concentrations
+        pattern_frame = self._map_biochemical_patterns(error_frame)
+        bio_results: dict[str, Any] = {}
+        for pat_col in ["pattern__charge", "pattern__polarity", "pattern__hydropathy"]:
+            if pat_col in pattern_frame.columns:
+                cat_name = pat_col.split("__")[1]
+                counts_by_pattern = {}
+                for pattern_label, subset in pattern_frame.groupby(pat_col):
+                    s_counts = subset["error_type"].value_counts().to_dict()
+                    counts_by_pattern[str(pattern_label)] = {
+                        "fp": int(s_counts.get("FP", 0)),
+                        "fn": int(s_counts.get("FN", 0)),
+                        "total": int(len(subset))
+                    }
+                bio_results[cat_name] = counts_by_pattern
+
+        if bio_results:
+            results["biochemical_patterns"] = bio_results
+
+        return results
+
+    @staticmethod
+    def _summarize_biological_context(error_frame: pd.DataFrame) -> list[dict[str, Any]]:
+        """Aggregate FP/FN counts by available biological grouping columns."""
+        candidate_columns = [
+            "gene_id",
+            "Gene(s)",
+            "protein_family",
+            "domain_id",
+            "Domain",
+        ]
+        available = [column for column in candidate_columns if column in error_frame.columns]
+        if not available:
+            return []
+
+        grouped = (
+            error_frame.groupby(available + ["error_type"], dropna=False)
+            .size()
+            .reset_index(name="count")
+        )
+        pivot = grouped.pivot_table(
+            index=available,
+            columns="error_type",
+            values="count",
+            aggfunc="sum",
+            fill_value=0,
+        ).reset_index()
+
+        rows: list[dict[str, Any]] = []
+        for _, item in pivot.iterrows():
+            fp_count = int(item.get("FP", 0))
+            fn_count = int(item.get("FN", 0))
+            total_errors = fp_count + fn_count
+            if total_errors <= 0:
+                continue
+
+            row: dict[str, Any] = {
+                "fp_count": fp_count,
+                "fn_count": fn_count,
+                "total_errors": total_errors,
+                "fp_ratio": float(fp_count / total_errors),
+                "fn_ratio": float(fn_count / total_errors),
+            }
+            for column in available:
+                value = item.get(column, "")
+                row[column] = "" if pd.isna(value) else str(value)
+            rows.append(row)
+
+        rows.sort(key=lambda value: int(value.get("total_errors", 0)), reverse=True)
+        return rows[:30]
+
     @staticmethod
     def _save_json(payload: dict[str, Any], output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 
     @staticmethod
-    def _save_tree_plot(model: DecisionTreeClassifier, feature_names: list[str], output_path: Path) -> None:
+    def _save_tree_plot(
+        model: DecisionTreeClassifier, 
+        feature_names: list[str], 
+        output_path: Path,
+        class_names: list[str] | None = None
+    ) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig, ax = plt.subplots(figsize=(16, 8))
-        plot_tree(model, feature_names=feature_names, class_names=["FN", "FP"], filled=True, ax=ax)
+        
+        if class_names is None:
+            class_names = ["FN", "FP"]
+            
+        plot_tree(
+            model, 
+            feature_names=feature_names, 
+            class_names=class_names, 
+            filled=True, 
+            ax=ax,
+            rounded=True,
+            proportion=True
+        )
         fig.tight_layout()
         fig.savefig(output_path, dpi=160)
         plt.close(fig)
@@ -440,9 +642,44 @@ class MultiDimensionalErrorAnalyzer:
 
             explainer = shap.TreeExplainer(surrogate_model)
             shap_values = explainer.shap_values(x)
-            values = shap_values[1] if isinstance(shap_values, list) and len(shap_values) > 1 else shap_values
+            if isinstance(shap_values, list):
+                target_values = shap_values[1] if len(shap_values) > 1 else shap_values[0]
+            else:
+                target_values = shap_values
+
+            values = np.asarray(target_values)
+            if values.ndim == 3:
+                if values.shape[-1] > 1:
+                    values = values[:, :, 1]
+                else:
+                    values = values[:, :, 0]
+            if values.ndim == 1:
+                values = values.reshape(-1, 1)
+            if values.ndim != 2:
+                return False, f"unexpected_shap_shape={values.shape}"
+
+            feature_matrix = np.asarray(x)
+            if feature_matrix.ndim == 1:
+                feature_matrix = feature_matrix.reshape(-1, 1)
+            if feature_matrix.ndim != 2:
+                return False, f"unexpected_feature_shape={feature_matrix.shape}"
+
+            if feature_matrix.shape[1] != values.shape[1]:
+                return False, (
+                    "shap_feature_mismatch: "
+                    f"values_features={values.shape[1]} input_features={feature_matrix.shape[1]}"
+                )
+
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            shap.summary_plot(values, x, feature_names=feature_names, show=False)
+            plt.figure(figsize=(10, 6))
+            shap.summary_plot(
+                values,
+                feature_matrix,
+                feature_names=feature_names,
+                plot_type="dot",
+                max_display=min(len(feature_names), 20),
+                show=False,
+            )
             plt.tight_layout()
             plt.savefig(output_path, dpi=160)
             plt.close()
@@ -487,11 +724,17 @@ class MultiDimensionalErrorAnalyzer:
             artifacts["error_analysis_summary_json"] = str(payload_path)
             return ErrorAnalysisResult(status=result.status, summary=result.summary, artifacts=artifacts)
 
+        # Pattern Concentration Analysis
+        # -----------------------------
+        patterns = self._analyze_pattern_concentration(error_frame)
+        summary["pattern_concentration"] = patterns
+
         surrogate_summary, surrogate_model, surrogate_x = self._fit_surrogate_tree(
             error_frame=error_frame,
             numeric_columns=numeric_columns,
         )
         summary["surrogate_tree"] = surrogate_summary
+        surrogate_feature_names = [column for column in numeric_columns if column in error_frame.columns]
 
         gene_stats_df, gene_corr_df = self._gene_proxy_analysis(
             y_true=y_true,
@@ -504,6 +747,7 @@ class MultiDimensionalErrorAnalyzer:
             "gene_count": int(len(gene_stats_df)),
             "correlation_count": int(len(gene_corr_df)),
         }
+        summary["biological_context"] = self._summarize_biological_context(error_frame)
 
         clustered_frame, clustering_summary = self._cluster_errors(
             error_frame=error_frame,
@@ -550,19 +794,29 @@ class MultiDimensionalErrorAnalyzer:
             pd.DataFrame(dbscan_profiles).to_csv(dbscan_profile_path, index=False)
             artifacts["dbscan_cluster_profiles_csv"] = str(dbscan_profile_path)
 
-        if detailed and surrogate_model is not None and surrogate_x is not None:
-            feature_names = [
-                item["feature"]
-                for item in surrogate_summary.get("feature_importances", [])
-                if isinstance(item, dict) and "feature" in item
-            ]
-            if not feature_names:
-                feature_names = [column for column in numeric_columns if column in error_frame.columns]
+        if surrogate_model is not None and surrogate_x is not None:
+            feature_names = list(surrogate_feature_names)
             if feature_names:
-                tree_plot_path = output_dir / "surrogate_tree_rules.png"
-                self._save_tree_plot(surrogate_model, feature_names, tree_plot_path)
+                tree_plot_path = output_dir / "surrogate_error_tree.png"
+                
+                y_unique = np.unique(surrogate_model.classes_)
+                tree_classes = []
+                if 0 in y_unique: tree_classes.append("FN")
+                if 1 in y_unique: tree_classes.append("FP")
+                
+                self._save_tree_plot(
+                    surrogate_model, 
+                    feature_names, 
+                    tree_plot_path, 
+                    class_names=tree_classes if tree_classes else None
+                )
                 artifacts["surrogate_tree_plot_png"] = str(tree_plot_path)
 
+                summary.setdefault("surrogate_tree", {})["plot_file"] = str(tree_plot_path.name)
+
+        if detailed and surrogate_model is not None and surrogate_x is not None:
+            feature_names = list(surrogate_feature_names)
+            if feature_names:
                 shap_plot_path = output_dir / "surrogate_tree_shap.png"
                 shap_ok, shap_reason = self._save_surrogate_shap_plot(
                     surrogate_model=surrogate_model,
