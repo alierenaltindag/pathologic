@@ -86,12 +86,15 @@ HOSTNAME=$(hostname)
 
 REPORT_FILENAME="${FILE_TIME}_${HOSTNAME}.html"
 
-$QUARTO_BIN render reports/model_performance_report.qmd \
+# Run Quarto from inside the reports directory to prevent resource resolution errors
+cd reports
+$QUARTO_BIN render model_performance_report.qmd \
     --output "$REPORT_FILENAME" \
     -P csv_path:"$RELATIVE_CSV_PATH" \
     -P run_profile:"$BUDGET" \
     -P run_machine:"$HOSTNAME" \
     -P run_time:"$CURRENT_TIME"
+cd ..
 
 echo ""
 echo "=========================================================="
