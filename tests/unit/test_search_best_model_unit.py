@@ -231,6 +231,11 @@ def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     assert args.model_pool == "xgboost,catboost,lightgbm"
     assert args.error_analysis_mode == "hybrid"
     assert args.disable_error_analysis is False
+    assert args.disable_compute_cost is False
+    assert args.compute_cost_single_runs == 20
+    assert args.compute_cost_batch_runs == 10
+    assert args.compute_cost_warmup_runs == 2
+    assert args.compute_cost_batch_size == 256
     assert args.disable_panel_thresholds is False
     assert args.panel_threshold_column == "Veri_Kaynagi_Paneli"
     assert args.panel_threshold_min_samples == 1
@@ -260,6 +265,30 @@ def test_arg_parser_accepts_panel_threshold_overrides() -> None:
     assert args.panel_threshold_column == "panel_id"
     assert args.panel_threshold_min_samples == 5
     assert args.panel_threshold_default == 0.42
+
+
+def test_arg_parser_accepts_compute_cost_overrides() -> None:
+    parser = build_arg_parser()
+    args = parser.parse_args(
+        [
+            "data.csv",
+            "--disable-compute-cost",
+            "--compute-cost-single-runs",
+            "5",
+            "--compute-cost-batch-runs",
+            "4",
+            "--compute-cost-warmup-runs",
+            "1",
+            "--compute-cost-batch-size",
+            "64",
+        ]
+    )
+
+    assert args.disable_compute_cost is True
+    assert args.compute_cost_single_runs == 5
+    assert args.compute_cost_batch_runs == 4
+    assert args.compute_cost_warmup_runs == 1
+    assert args.compute_cost_batch_size == 64
 
 
 def test_arg_parser_allows_verbose_inner_search_flag() -> None:

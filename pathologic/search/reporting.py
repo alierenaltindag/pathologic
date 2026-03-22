@@ -177,6 +177,33 @@ def _build_train_report_payload(
             else {}
         )
 
+        compute_cost_payload = row.get("compute_cost") if isinstance(row.get("compute_cost"), dict) else {}
+        compute_cost_training = (
+            compute_cost_payload.get("training")
+            if isinstance(compute_cost_payload.get("training"), dict)
+            else {}
+        )
+        compute_cost_training_memory = (
+            compute_cost_training.get("memory")
+            if isinstance(compute_cost_training.get("memory"), dict)
+            else {}
+        )
+        compute_cost_inference = (
+            compute_cost_payload.get("inference")
+            if isinstance(compute_cost_payload.get("inference"), dict)
+            else {}
+        )
+        compute_cost_gpu = (
+            compute_cost_payload.get("gpu_after_inference")
+            if isinstance(compute_cost_payload.get("gpu_after_inference"), dict)
+            else {}
+        )
+        compute_cost_artifacts = (
+            compute_cost_payload.get("artifacts")
+            if isinstance(compute_cost_payload.get("artifacts"), dict)
+            else {}
+        )
+
         candidate_rows.append(
             {
                 "candidate": candidate_name,
@@ -202,6 +229,19 @@ def _build_train_report_payload(
                 if panel_summary
                 else 0,
                 "selected_params_source": str(row.get("selected_params_source", "unknown")),
+                "compute_cost_status": str(compute_cost_payload.get("status", "missing")),
+                "train_total_seconds": compute_cost_training.get("train_total_seconds"),
+                "iteration_seconds": compute_cost_training.get("iteration_seconds"),
+                "batch_size": compute_cost_training.get("batch_size"),
+                "single_sample_ms": compute_cost_inference.get("single_sample_ms"),
+                "batch_total_ms": compute_cost_inference.get("batch_total_ms"),
+                "batch_per_sample_ms": compute_cost_inference.get("batch_per_sample_ms"),
+                "peak_vram_mb": compute_cost_gpu.get("vram_peak_allocated_mb"),
+                "train_memory_delta_mb": compute_cost_training_memory.get("process_rss_delta_mb"),
+                "train_memory_peak_delta_mb": compute_cost_training_memory.get(
+                    "process_rss_peak_delta_mb"
+                ),
+                "compute_cost_report_html": compute_cost_artifacts.get("compute_cost_report_html"),
             }
         )
 
@@ -276,11 +316,18 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
             f"<td>{_fmt(item.get('raw_brier'))}</td>"
             f"<td>{_fmt(item.get('objective_score'))}</td>"
             f"<td>{_fmt(item.get('runtime_seconds'))}</td>"
+            f"<td>{_fmt(item.get('train_total_seconds'))}</td>"
+            f"<td>{_fmt(item.get('single_sample_ms'))}</td>"
+            f"<td>{_fmt(item.get('batch_total_ms'))}</td>"
+            f"<td>{_fmt(item.get('peak_vram_mb'))}</td>"
+            f"<td>{_fmt(item.get('train_memory_delta_mb'))}</td>"
+            f"<td>{_fmt(item.get('train_memory_peak_delta_mb'))}</td>"
+            f"<td>{_fmt(item.get('compute_cost_report_html'))}</td>"
             "</tr>"
         )
 
     if not table_rows:
-        table_rows.append("<tr><td colspan='12'>No candidate rows available.</td></tr>")
+        table_rows.append("<tr><td colspan='19'>No candidate rows available.</td></tr>")
 
     winner_json = escape(json.dumps(winner, ensure_ascii=True, indent=2))
     html = (
@@ -301,7 +348,7 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
         f"<div><strong>Selection mode:</strong> {escape(str(winner.get('selection_mode', 'calibration_aware')))}</div>"
         "</div>"
         "<div class='card'><h2>Candidate Quick Summary</h2>"
-        "<table><thead><tr><th>Candidate</th><th>Status</th><th>F1</th><th>ROC-AUC</th><th>AUPRC</th><th>MCC</th><th>Precision</th><th>Recall</th><th>ECE(raw)</th><th>Brier(raw)</th><th>Objective</th><th>Runtime(s)</th></tr></thead><tbody>"
+        "<table><thead><tr><th>Candidate</th><th>Status</th><th>F1</th><th>ROC-AUC</th><th>AUPRC</th><th>MCC</th><th>Precision</th><th>Recall</th><th>ECE(raw)</th><th>Brier(raw)</th><th>Objective</th><th>Runtime(s)</th><th>Train(s)</th><th>SingleInf(ms)</th><th>BatchInf(ms)</th><th>PeakVRAM(MB)</th><th>TrainMemDelta(MB)</th><th>TrainMemPeakDelta(MB)</th><th>ComputeCostReport</th></tr></thead><tbody>"
         + "".join(table_rows)
         + "</tbody></table></div>"
         "<div class='card'><h2>Winner Detailed Configuration</h2>"

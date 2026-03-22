@@ -19,6 +19,17 @@ from pathologic.search import hpo_nas as _search_hpo_nas
 from pathologic.search.logging import emit, inner_search_runtime
 from pathologic.search.spec import BudgetProfile, CandidateSpec
 from pathologic.search.utils import parse_model_pool
+from pathologic.utils.compute_cost import (
+    benchmark_inference_latency,
+    collect_framework_versions,
+    collect_gpu_memory_snapshot,
+    collect_reproducibility_settings,
+    collect_system_info,
+    create_process_memory_monitor,
+    extract_iteration_metadata,
+    resolve_batch_size,
+    reset_gpu_peak_memory_stats,
+)
 from pathologic.utils.hardware import detect_preferred_device
 
 
@@ -165,6 +176,12 @@ def evaluate_candidate(
     run_logger: logging.Logger,
     step_start: float,
 ) -> tuple[dict[str, Any], PathoLogic | None]:
+    compute_cost_enabled = not bool(getattr(args, "disable_compute_cost", False))
+    compute_cost_single_runs = int(getattr(args, "compute_cost_single_runs", 20))
+    compute_cost_batch_runs = int(getattr(args, "compute_cost_batch_runs", 10))
+    compute_cost_warmup_runs = int(getattr(args, "compute_cost_warmup_runs", 2))
+    compute_cost_batch_size = int(getattr(args, "compute_cost_batch_size", 256))
+
     row: dict[str, Any] = {
         "candidate": candidate.name,
         "kind": candidate.kind,
@@ -181,6 +198,28 @@ def evaluate_candidate(
 
     try:
         model = _search_candidate.model_for_candidate_with_hybrid_config(candidate, args)
+        compute_cost_payload: dict[str, Any] = {
+            "status": "enabled" if compute_cost_enabled else "skipped",
+            "config": {
+                "single_runs": compute_cost_single_runs,
+                "batch_runs": compute_cost_batch_runs,
+                "warmup_runs": compute_cost_warmup_runs,
+                "batch_size": compute_cost_batch_size,
+            },
+        }
+        if compute_cost_enabled:
+            compute_cost_payload["system"] = collect_system_info()
+            compute_cost_payload["frameworks"] = collect_framework_versions()
+            compute_cost_payload["gpu_before_train"] = collect_gpu_memory_snapshot()
+            compute_cost_payload["reproducibility"] = collect_reproducibility_settings(
+                seed=int(args.seed),
+                model=model,
+            )
+            reset_gpu_peak_memory_stats()
+            train_memory_monitor = create_process_memory_monitor(sample_interval_seconds=0.05)
+        else:
+            train_memory_monitor = None
+
         if detect_preferred_device() != "cuda":
             emit(
                 (
@@ -458,6 +497,9 @@ def evaluate_candidate(
             train_kwargs["model_params"] = selected_params
 
         stage_update("train", state="start")
+        train_started = monotonic()
+        if train_memory_monitor is not None:
+            train_memory_monitor.start()
         with inner_search_runtime(
             quiet=quiet_inner_search,
             show_inner_progress=False,
@@ -465,8 +507,25 @@ def evaluate_candidate(
             suppress_stderr=True,
         ):
             model.train(str(outer_train_csv), **train_kwargs)
+        train_seconds = float(monotonic() - train_started)
+        train_memory_profile = (
+            train_memory_monitor.stop() if train_memory_monitor is not None else None
+        )
         _emit_gpu_runtime_backend_warnings(candidate=candidate, model=model, run_logger=run_logger)
         stage_update("train", state="done")
+
+        if compute_cost_enabled:
+            compute_cost_payload["training"] = extract_iteration_metadata(
+                model=model,
+                train_seconds=train_seconds,
+            )
+            compute_cost_payload["training"]["batch_size"] = resolve_batch_size(
+                model=model,
+                selected_params=selected_params,
+            )
+            if isinstance(train_memory_profile, dict):
+                compute_cost_payload["training"]["memory"] = train_memory_profile
+            compute_cost_payload["gpu_after_train"] = collect_gpu_memory_snapshot()
 
         stage_update("evaluate", state="start")
         with inner_search_runtime(
@@ -597,6 +656,44 @@ def evaluate_candidate(
                 "reason": "disabled_by_flag",
             }
 
+        if compute_cost_enabled:
+            try:
+                inference_latency = benchmark_inference_latency(
+                    model=model,
+                    dataset=outer_test_df,
+                    feature_columns=feature_columns,
+                    label_column="label",
+                    single_runs=compute_cost_single_runs,
+                    batch_runs=compute_cost_batch_runs,
+                    warmup_runs=compute_cost_warmup_runs,
+                    batch_size=compute_cost_batch_size,
+                )
+                compute_cost_payload["inference"] = {
+                    "single_sample_ms": float(inference_latency.single_sample_ms),
+                    "batch_total_ms": float(inference_latency.batch_total_ms),
+                    "batch_per_sample_ms": float(inference_latency.batch_per_sample_ms),
+                    "batch_size": int(inference_latency.batch_size),
+                    "full_dataset_ms": float(inference_latency.full_dataset_ms),
+                    "full_dataset_size": int(inference_latency.full_dataset_size),
+                }
+                compute_cost_payload["gpu_after_inference"] = collect_gpu_memory_snapshot()
+            except Exception as exc:
+                compute_cost_payload["inference"] = {
+                    "status": "failed",
+                    "reason": str(exc),
+                }
+
+            compute_cost_payload = _search_artifacts.compute_candidate_compute_cost_artifacts(
+                run_dir=run_dir,
+                candidate_name=candidate.name,
+                payload=compute_cost_payload,
+            )
+        else:
+            compute_cost_payload = {
+                "status": "skipped",
+                "reason": "disabled_by_flag",
+            }
+
         row["hpo"] = hpo_result
         if hpo_level1_result is not None:
             row["hpo_level1"] = hpo_level1_result
@@ -616,6 +713,7 @@ def evaluate_candidate(
         row["calibration"] = calibration_payload
         row["panel_thresholds"] = panel_thresholds_payload
         row["error_analysis"] = error_analysis_payload
+        row["compute_cost"] = compute_cost_payload
         row["runtime_seconds"] = float(monotonic() - step_start)
         run_logger.info(
             "candidate=%s status=ok source=%s f1=%s runtime_seconds=%.4f",

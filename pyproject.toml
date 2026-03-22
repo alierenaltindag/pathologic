@@ -25,6 +25,7 @@ dependencies = [
     "numpy>=2.0.0",
     "optuna>=3.6.1",
     "pandas>=2.2.0",
+    "psutil>=6.0.0",
     "pyarrow>=17.0.0",
     "PyYAML>=6.0.1",
     "pytorch-tabnet>=4.1.0",

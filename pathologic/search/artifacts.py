@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from html import escape
 import json
 import re
 from pathlib import Path
@@ -361,3 +362,101 @@ def compute_candidate_panel_threshold_artifacts(
     panel_payload["artifacts"]["panel_thresholds_report_html"] = str(panel_html_path)
 
     return panel_payload
+
+
+def _render_compute_cost_html(*, payload: dict[str, Any], output_path: Path) -> None:
+    def _flatten(prefix: str, value: Any, output: list[tuple[str, str]]) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                child_prefix = f"{prefix}.{key}" if prefix else str(key)
+                _flatten(child_prefix, nested, output)
+            return
+        if isinstance(value, list):
+            output.append((prefix, json.dumps(value, ensure_ascii=True)))
+            return
+        output.append((prefix, str(value)))
+
+    def _kv_rows(values: dict[str, Any]) -> str:
+        flattened: list[tuple[str, str]] = []
+        _flatten("", values, flattened)
+        rows: list[str] = []
+        for key, rendered in flattened:
+            rows.append(
+                "<tr>"
+                f"<td>{escape(str(key))}</td>"
+                f"<td>{escape(str(rendered))}</td>"
+                "</tr>"
+            )
+        return "".join(rows)
+
+    system_info = payload.get("system") if isinstance(payload.get("system"), dict) else {}
+    frameworks = payload.get("frameworks") if isinstance(payload.get("frameworks"), dict) else {}
+    training = payload.get("training") if isinstance(payload.get("training"), dict) else {}
+    inference = payload.get("inference") if isinstance(payload.get("inference"), dict) else {}
+    reproducibility = (
+        payload.get("reproducibility") if isinstance(payload.get("reproducibility"), dict) else {}
+    )
+
+    html = (
+        "<html><head><meta charset='utf-8'><title>Candidate Compute Cost</title>"
+        "<style>"
+        "body{font-family:Segoe UI,Tahoma,sans-serif;line-height:1.5;color:#1f2937;max-width:1200px;margin:0 auto;padding:20px;background:#f3f6fb;}"
+        "h1,h2{color:#0f2942;}"
+        "table{width:100%;border-collapse:collapse;margin-top:8px;}"
+        "th,td{border:1px solid #dbe4ee;padding:8px;text-align:left;background:#fff;font-size:12px;vertical-align:top;}"
+        "th{background:#eaf1f8;font-weight:700;}"
+        ".card{background:#fff;border:1px solid #dbe4ee;border-radius:8px;padding:14px;margin-bottom:14px;}"
+        "</style></head><body>"
+        "<h1>Candidate Compute Cost Report</h1>"
+        "<div class='card'>"
+        f"<div><strong>Status:</strong> {escape(str(payload.get('status', 'unknown')))}</div>"
+        f"<div><strong>Candidate:</strong> {escape(str(payload.get('candidate', 'unknown')))}</div>"
+        "</div>"
+        "<div class='card'><h2>System</h2><table><tbody>"
+        + _kv_rows(system_info)
+        + "</tbody></table></div>"
+        "<div class='card'><h2>Framework Versions</h2><table><tbody>"
+        + _kv_rows(frameworks)
+        + "</tbody></table></div>"
+        "<div class='card'><h2>Training Cost</h2><table><tbody>"
+        + _kv_rows(training)
+        + "</tbody></table></div>"
+        "<div class='card'><h2>Inference Cost</h2><table><tbody>"
+        + _kv_rows(inference)
+        + "</tbody></table></div>"
+        "<div class='card'><h2>Reproducibility</h2><table><tbody>"
+        + _kv_rows(reproducibility)
+        + "</tbody></table></div>"
+        "</body></html>"
+    )
+    output_path.write_text(html, encoding="utf-8")
+
+
+def compute_candidate_compute_cost_artifacts(
+    *,
+    run_dir: Path,
+    candidate_name: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    compute_dir = run_dir / "compute_cost" / candidate_slug(candidate_name)
+    compute_dir.mkdir(parents=True, exist_ok=True)
+
+    compute_payload = dict(payload)
+    compute_payload["candidate"] = candidate_name
+
+    json_path = compute_dir / "compute_cost_report.json"
+    html_path = compute_dir / "compute_cost_report.html"
+
+    json_path.write_text(
+        json.dumps(compute_payload, ensure_ascii=True, indent=2),
+        encoding="utf-8",
+    )
+    _render_compute_cost_html(payload=compute_payload, output_path=html_path)
+
+    artifacts = compute_payload.get("artifacts")
+    if not isinstance(artifacts, dict):
+        artifacts = {}
+    artifacts["compute_cost_report_json"] = str(json_path)
+    artifacts["compute_cost_report_html"] = str(html_path)
+    compute_payload["artifacts"] = artifacts
+    return compute_payload

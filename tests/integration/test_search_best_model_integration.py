@@ -165,6 +165,28 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
             assert key in artifacts
             assert Path(str(artifacts[key])).exists()
 
+        compute_cost = row.get("compute_cost")
+        assert isinstance(compute_cost, dict)
+        assert compute_cost.get("status") in {"enabled", "skipped"}
+        if compute_cost.get("status") != "enabled":
+            continue
+
+        artifacts = compute_cost.get("artifacts")
+        assert isinstance(artifacts, dict)
+        for key in ("compute_cost_report_json", "compute_cost_report_html"):
+            assert key in artifacts
+            assert Path(str(artifacts[key])).exists()
+
+        training = compute_cost.get("training")
+        assert isinstance(training, dict)
+        assert isinstance(training.get("train_total_seconds"), float)
+
+        inference = compute_cost.get("inference")
+        assert isinstance(inference, dict)
+        if inference.get("status") != "failed":
+            assert isinstance(inference.get("single_sample_ms"), float)
+            assert isinstance(inference.get("batch_total_ms"), float)
+
     for row in rows:
         if not isinstance(row, dict):
             continue

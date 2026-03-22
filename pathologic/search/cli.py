@@ -17,6 +17,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     search_defaults = resolve_search_defaults_from_defaults()
     explain_defaults_raw = search_defaults.get("explainability")
     explain_defaults = explain_defaults_raw if isinstance(explain_defaults_raw, dict) else {}
+    compute_cost_defaults_raw = search_defaults.get("compute_cost")
+    compute_cost_defaults = (
+        compute_cost_defaults_raw if isinstance(compute_cost_defaults_raw, dict) else {}
+    )
 
     hybrid_strategy_default = str(search_defaults.get("hybrid_strategy", "soft_voting"))
     hybrid_weighting_policy_default = str(search_defaults.get("hybrid_weighting_policy", "auto"))
@@ -52,6 +56,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     explain_background_size_default = int(explain_defaults.get("background_size", 100))
     explain_fp_top_k_default = int(explain_defaults.get("fp_top_k", 10))
     explain_fp_min_negative_count_default = int(explain_defaults.get("fp_min_negative_count", 1))
+    compute_cost_single_runs_default = int(compute_cost_defaults.get("single_runs", 20))
+    compute_cost_batch_runs_default = int(compute_cost_defaults.get("batch_runs", 10))
+    compute_cost_warmup_runs_default = int(compute_cost_defaults.get("warmup_runs", 2))
+    compute_cost_batch_size_default = int(compute_cost_defaults.get("batch_size", 256))
 
     parser = argparse.ArgumentParser(
         description="Run leakage-safe exhaustive model search for PathoLogic",
@@ -315,6 +323,35 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=explain_fp_min_negative_count_default,
         help="Minimum negative support required for false-positive hotspot enrichment",
+    )
+    parser.add_argument(
+        "--disable-compute-cost",
+        action="store_true",
+        help="Disable per-candidate compute-cost artifact generation",
+    )
+    parser.add_argument(
+        "--compute-cost-single-runs",
+        type=int,
+        default=compute_cost_single_runs_default,
+        help="Number of single-sample inference benchmark runs per candidate",
+    )
+    parser.add_argument(
+        "--compute-cost-batch-runs",
+        type=int,
+        default=compute_cost_batch_runs_default,
+        help="Number of batch inference benchmark runs per candidate",
+    )
+    parser.add_argument(
+        "--compute-cost-warmup-runs",
+        type=int,
+        default=compute_cost_warmup_runs_default,
+        help="Number of warmup runs before inference benchmarking",
+    )
+    parser.add_argument(
+        "--compute-cost-batch-size",
+        type=int,
+        default=compute_cost_batch_size_default,
+        help="Batch size used for inference benchmark timing",
     )
 
     parser.set_defaults(disable_hybrid_normalize_weights=not hybrid_normalize_default)

@@ -113,6 +113,16 @@ search:
     background_size: 100
     fp_top_k: 10
     fp_min_negative_count: 1
+  # Candidate bazli hesaplama maliyeti raporlama ayarlari.
+  compute_cost:
+    # Tek ornek inference benchmark tekrar sayisi.
+    single_runs: 20
+    # Batch inference benchmark tekrar sayisi.
+    batch_runs: 10
+    # Benchmark oncesi warmup tekrar sayisi.
+    warmup_runs: 2
+    # Batch benchmark olcumunde kullanilacak ornek sayisi.
+    batch_size: 256
   # Search asamasinda cok boyutlu hata analizi davranisi.
   error_analysis_mode: hybrid
 
