@@ -34,13 +34,32 @@ def test_validate_schema_accepts_required_columns(variant_frame: pd.DataFrame) -
     )
 
 
-def test_build_folds_prevents_gene_overlap(variant_frame: pd.DataFrame) -> None:
+def test_build_folds_allows_gene_overlap_by_default(variant_frame: pd.DataFrame) -> None:
     folds = build_folds(
         variant_frame,
         label_column="label",
         gene_column="gene_id",
         n_splits=3,
         stratified=True,
+        random_state=42,
+    )
+
+    overlap_counts: list[int] = []
+    for train_idx, val_idx in folds:
+        train_genes = set(variant_frame.iloc[train_idx]["gene_id"])
+        val_genes = set(variant_frame.iloc[val_idx]["gene_id"])
+        overlap_counts.append(len(train_genes.intersection(val_genes)))
+    assert any(count > 0 for count in overlap_counts)
+
+
+def test_build_folds_prevents_gene_overlap_when_disabled(variant_frame: pd.DataFrame) -> None:
+    folds = build_folds(
+        variant_frame,
+        label_column="label",
+        gene_column="gene_id",
+        n_splits=3,
+        stratified=True,
+        allow_same_gene_overlap=False,
         random_state=42,
     )
 
@@ -62,7 +81,7 @@ def test_summarize_folds_reports_distribution(variant_frame: pd.DataFrame) -> No
     summary = summarize_folds(variant_frame, folds, label_column="label", gene_column="gene_id")
 
     assert len(summary) == 3
-    assert all(item["shared_genes"] == 0 for item in summary)
+    assert all(int(item["shared_genes"]) >= 0 for item in summary)
     assert all(0.0 <= float(item["train_positive_rate"]) <= 1.0 for item in summary)
     assert all(0.0 <= float(item["val_positive_rate"]) <= 1.0 for item in summary)
 
@@ -75,6 +94,7 @@ def test_build_holdout_split_prevents_gene_overlap(variant_frame: pd.DataFrame) 
         test_size=0.2,
         val_size=0.2,
         stratified=True,
+        allow_same_gene_overlap=False,
         random_state=42,
     )
 

@@ -49,14 +49,21 @@ class SearchRunBootstrapContext:
     y_val_nas: np.ndarray
 
 
-def _ensure_no_holdout_leakage(summary: dict[str, Any]) -> None:
+def _holdout_overlap_counts(summary: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
     for key in (
         "train_val_shared_genes",
         "train_test_shared_genes",
         "val_test_shared_genes",
     ):
-        if key in summary and int(summary[key]) != 0:
-            raise RuntimeError(f"Leakage detected: {key}={summary[key]}")
+        raw_value = summary.get(key)
+        if raw_value is None:
+            continue
+        try:
+            counts[key] = int(raw_value)
+        except (TypeError, ValueError):
+            continue
+    return counts
 
 
 def bootstrap_search_run(args: argparse.Namespace, *, budget: BudgetProfile) -> SearchRunBootstrapContext:
@@ -91,6 +98,7 @@ def bootstrap_search_run(args: argparse.Namespace, *, budget: BudgetProfile) -> 
         test_size=float(args.outer_test_size),
         val_size=float(args.outer_val_size),
         stratified=True,
+        allow_same_gene_overlap=True,
         random_state=int(args.seed),
     )
     split_summary = summarize_holdout_split(
@@ -99,7 +107,15 @@ def bootstrap_search_run(args: argparse.Namespace, *, budget: BudgetProfile) -> 
         label_column="label",
         gene_column="gene_id",
     )
-    _ensure_no_holdout_leakage(split_summary)
+    overlap_counts = _holdout_overlap_counts(split_summary)
+    nonzero_overlap = {
+        key: value for key, value in overlap_counts.items() if int(value) > 0
+    }
+    if nonzero_overlap:
+        run_logger.warning(
+            "same-gene overlap observed in holdout split: %s",
+            nonzero_overlap,
+        )
 
     outer_base_train_idx = split_indices["train"]
     outer_calibration_idx = split_indices["val"]

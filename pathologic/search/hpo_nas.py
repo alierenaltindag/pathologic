@@ -294,6 +294,7 @@ def build_nas_arrays(
         test_size=0.2,
         val_size=0.2,
         stratified=True,
+        allow_same_gene_overlap=True,
         random_state=seed,
     )
     inner_train = train_df.iloc[split["train"]]

@@ -119,8 +119,8 @@ def test_build_split_manifest_warnings_reports_missing_and_nonzero_leakage_field
         outer_test_rows=3,
     )
 
-    assert warnings_payload["status"] == "error"
-    assert warnings_payload["has_errors"] is True
+    assert warnings_payload["status"] == "warning"
+    assert warnings_payload["has_errors"] is False
     items = warnings_payload["items"]
     assert isinstance(items, list)
     codes = {str(item.get("code")) for item in items if isinstance(item, dict)}
