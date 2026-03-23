@@ -38,7 +38,7 @@ def is_identifier_like_column(column_name: str) -> bool:
     if token in {"geneid", "label", "target"}:
         return False
     if "context" in token:
-        return False
+        return True
     return any(
         marker in token
         for marker in (
@@ -128,8 +128,9 @@ def prepare_dataset_for_pathologic(
         str(column) for column in (error_analysis_columns or []) if str(column)
     ]
     passthrough_columns = [
-        column for column in passthrough_candidates if column in cols and column not in {gene_col, label_col}
+        column for column in passthrough_candidates if column in cols and column != label_col
     ]
+    passthrough_columns = list(dict.fromkeys(passthrough_columns))
 
     excluded_set = {str(column) for column in (excluded_columns or []) if str(column)}
     excluded_set.update(passthrough_columns)

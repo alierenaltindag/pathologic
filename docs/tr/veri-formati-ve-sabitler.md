@@ -2,33 +2,34 @@
 
 ## Zorunlu Sutunlar
 
-- `variant_id`: satir kimligi
-- `gene_id`: leakage-safe bolme icin grup kimligi
-- `label`: ikili hedef (0/1)
-- `data.required_features` altinda listelenen feature sutunlari
+- `Target`: ikili hedef (0/1)
+- `Gene(s)`: leakage-safe bolme icin grup kimligi
+- `data.required_features` altinda listelenen engineered feature sutunlari
 
 Varsayilan config referansi: [pathologic/configs/defaults.yaml](pathologic/configs/defaults.yaml).
 
 ## Minimal Ornek
 
 ```csv
-variant_id,gene_id,label,REVEL_Score,cadd.phred
-v1,G1,1,0.91,28.4
-v2,G1,0,0.07,7.2
-v3,G2,1,0.84,24.8
-v4,G2,0,0.15,10.1
+VariationID,Gene(s),Target,REVEL_Score,cadd.phred,gnomAD_is_zero,gnomAD_log,cpg_flag,proline_intro,cysteine_intro,proline_remove
+v1,G1,1,0.91,28.4,1,-8.0,1,0,0,0
+v2,G1,0,0.07,7.2,0,-2.1,0,1,0,1
+v3,G2,1,0.84,24.8,0,-3.2,1,0,1,0
+v4,G2,0,0.15,10.1,0,-1.4,0,0,0,0
 ```
 
-## Opsiyonel Sutunlar
+## Metadata Sutunlari (Train'de Kullanilmaz)
 
-- `domain_id`
-- `protein_family`
+- `VariationID`
+- `Gene(s)`
+- `Protein change`
+- `Veri_Kaynagi_Paneli`
 
-Bu sutunlar grup bazli hata analizi ve hotspot kalitesini artirir.
+Bu sutunlar explainability ve hata analizi raporlarinda korunur.
 
 ## Split ve Leakage Kurallari
 
-- `gene_id` varsa varsayilan olarak grouped split kullanilir.
+- `Gene(s)` varsa varsayilan olarak grouped split kullanilir.
 - Ayni gen train ve validation foldlarinda birlikte bulunmamalidir.
 - Preprocess artifact'lari yalniz train fold uzerinde fit edilir.
 
@@ -47,9 +48,17 @@ Test referanslari:
 
 ```yaml
 data:
-  label_column: label
-  gene_column: gene_id
+  label_column: Target
+  gene_column: Gene(s)
   required_features:
-    - revel_score
-    - cadd_phred
+    - REVEL_Score
+    - cadd.phred
+    - gnomAD_is_zero
+    - gnomAD_log
+    - cpg_flag
+  excluded_columns:
+    - VariationID
+    - Protein change
+    - Gene(s)
+    - Veri_Kaynagi_Paneli
 ```

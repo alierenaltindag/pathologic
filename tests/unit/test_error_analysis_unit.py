@@ -28,7 +28,8 @@ def _sample_error_dataset() -> pd.DataFrame:
             "label": [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
             "feature__REVEL_Score": [0.9, 0.2, 0.7, 0.4, 0.8, 0.1, 0.75, 0.35, 0.6, 0.3, 0.85, 0.15],
             "feature__cadd.phred": [25.0, 8.0, 23.0, 10.0, 26.0, 7.0, 24.0, 9.0, 20.0, 11.0, 27.0, 6.0],
-            "feature__gnomAD_AF": [0.0, 0.03, 0.001, 0.04, 0.0, 0.05, 0.002, 0.02, 0.005, 0.03, 0.0, 0.04],
+            "feature__gnomAD_log": [-8.0, -1.52, -3.0, -1.39, -8.0, -1.3, -2.7, -1.7, -2.3, -1.52, -8.0, -1.39],
+            "feature__gnomAD_is_zero": [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0],
             "feature__Hyd_Delta": [1.2, -0.4, 0.8, -0.3, 1.0, -0.6, 0.9, -0.2, 0.7, -0.5, 1.1, -0.7],
             "feature__MW_Delta": [15.0, -8.0, 12.0, -6.0, 14.0, -9.0, 13.0, -5.0, 11.0, -7.0, 16.0, -10.0],
             "feature__AA_Position": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120],
@@ -69,6 +70,7 @@ def test_error_analysis_excludes_aa_position_and_generates_summary(tmp_path: Pat
 
     assert result.status == "ok"
     assert "feature__AA_Position" not in result.summary["numeric_features_used"]
+    assert "feature__gnomAD_log" in result.summary["numeric_features_used"]
     assert "error_analysis_summary_json" in result.artifacts
 
 
@@ -100,7 +102,7 @@ def test_error_analysis_returns_cluster_summary_when_errors_exist(tmp_path: Path
 
 def test_pattern_concentration_analysis_logic() -> None:
     dataset = pd.DataFrame({
-        "feature__gnomAD_AF": [0.00001, 0.005, 0.5, 0.0000001],
+        "feature__gnomAD_log": [-5.0, -2.3, -0.3, -6.5],
         "feature__REVEL_Score": [0.9, 0.1, 0.7, 0.2],
         "feature__cadd.phred": [10.0, 30.0, 5.0, 35.0],
         "feature__Charge_Change": [1, -1, 0, 0],
@@ -122,12 +124,19 @@ def test_pattern_concentration_analysis_logic() -> None:
     
     patterns = analyzer._analyze_pattern_concentration(error_frame)
     
-    # Check frequency bins
+    # Check relative frequency bins for transformed AF values
     assert "population_frequency" in patterns
     freqs = patterns["population_frequency"]
-    assert freqs["Rare (<0.01%)"]["total"] == 2
-    assert freqs["Low Freq (0.01-1%)"]["total"] == 1
-    assert freqs["Common (>1%)"]["total"] == 1
+    assert "Low (Relative AF)" in freqs
+    assert "Mid (Relative AF)" in freqs
+    assert "High (Relative AF)" in freqs
+    total_from_bins = (
+        freqs["Low (Relative AF)"]["total"]
+        + freqs["Mid (Relative AF)"]["total"]
+        + freqs["High (Relative AF)"]["total"]
+        + freqs.get("Missing/Invalid", {}).get("total", 0)
+    )
+    assert int(total_from_bins) == int(len(error_frame))
     
     # Check conflicts
     # Row 0: REVEL 0.9, CADD 10 -> revel_high_cadd_low
@@ -149,7 +158,7 @@ def test_pattern_concentration_analysis_logic() -> None:
 def test_population_frequency_handles_scaled_inputs_without_dropping_rows() -> None:
     dataset = pd.DataFrame(
         {
-            "feature__gnomAD_AF": [-1.3, -0.8, -0.2, 0.1, 0.5, 1.2],
+            "feature__gnomAD_log": [-1.3, -0.8, -0.2, 0.1, 0.5, 1.2],
             "feature__REVEL_Score": [0.2, 0.4, 0.1, 0.8, 0.3, 0.7],
             "feature__cadd.phred": [12.0, 14.0, 8.0, 22.0, 18.0, 25.0],
             "label": [0, 1, 0, 1, 0, 1],

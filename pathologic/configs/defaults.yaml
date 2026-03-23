@@ -138,7 +138,8 @@ data:
     - REVEL_Score
     - dbnsfp.sift.score
     - GERP_Score
-    - gnomAD_AF
+    - gnomAD_is_zero
+    - gnomAD_log
     - BLOSUM_Score
     - Charge_Change
     - Polarity_Change
@@ -148,6 +149,10 @@ data:
     - Shannon_Entropy
     - Local_Hydrophobicity
     - Prolin_Cysteine_Count
+    - cpg_flag
+    - proline_intro
+    - cysteine_intro
+    - proline_remove
   # Model/member bazli feature yonlendirme (opsiyonel).
   # single: tek model alias -> feature listesi
   # hybrid: hibrit alias -> members -> alias -> feature listesi
@@ -162,7 +167,8 @@ data:
       logreg:
         - feature__REVEL_Score
         - feature__cadd.phred
-        - feature__gnomAD_AF
+        - feature__gnomAD_log
+        - feature__gnomAD_is_zero
     hybrid:
       catboost+logreg:
         members:
@@ -170,28 +176,32 @@ data:
             - feature__Protein_change
             - feature__Ref_AA
             - feature__Alt_AA
-            - feature__AA_Position
             - feature__BLOSUM_Score
           logreg:
             - feature__REVEL_Score
             - feature__cadd.phred
-            - feature__gnomAD_AF
+            - feature__gnomAD_log
+            - feature__gnomAD_is_zero
             - feature__GERP_Score
             - feature__dbnsfp.sift.score
 
   # Bu listedeki sutunlar pipeline boyunca hic kullanilmaz ve filtrelenir.
   excluded_columns:
     - VariationID
+    - Protein change
     - Gene(s)
     - Veri_Kaynagi_Paneli
     - AA_Position
+    - DNA_Context
+    - Protein_Context
 
   # Egitimde feature olarak kullanilmayan ancak hata analizinde
   # group bazli raporlama icin korunacak alanlar.
   error_analysis_columns:
-    - Veri_Kaynagi_Paneli
-    - Protein change
+    - VariationID
     - Gene(s)
+    - Protein change
+    - Veri_Kaynagi_Paneli
     - Ref_AA
     - Alt_AA
 

@@ -206,6 +206,45 @@ def test_prepare_dataset_retains_error_analysis_columns_without_feature_encoding
     assert stats["retained_error_analysis_column_count"] == 1
 
 
+def test_prepare_dataset_retains_requested_metadata_and_uses_engineered_features(
+    tmp_path: Path,
+) -> None:
+    raw = pd.DataFrame(
+        {
+            "VariationID": ["v1", "v2", "v3"],
+            "Gene(s)": ["G1", "G2", "G3"],
+            "Protein change": ["A10V", "R20Q", "P30L"],
+            "Veri_Kaynagi_Paneli": ["panel_a", "panel_b", "panel_c"],
+            "Target": [1, 0, 1],
+            "gnomAD_log": [-8.0, -3.0, -1.0],
+            "gnomAD_is_zero": [1, 0, 0],
+            "cpg_flag": [1, 0, 1],
+        }
+    )
+    source = tmp_path / "raw.csv"
+    output = tmp_path / "prepared.csv"
+    raw.to_csv(source, index=False)
+
+    metadata_columns = ["VariationID", "Gene(s)", "Protein change", "Veri_Kaynagi_Paneli"]
+    prepared_csv, feature_columns, stats = prepare_dataset_for_pathologic(
+        str(source),
+        str(output),
+        excluded_columns=metadata_columns,
+        error_analysis_columns=metadata_columns,
+    )
+
+    prepared = pd.read_csv(prepared_csv)
+    assert "gene_id" in prepared.columns
+    for column in metadata_columns:
+        assert column in prepared.columns
+        assert f"feature__{column.replace(' ', '_')}" not in prepared.columns
+
+    assert "feature__gnomAD_log" in feature_columns
+    assert "feature__gnomAD_is_zero" in feature_columns
+    assert "feature__cpg_flag" in feature_columns
+    assert stats["retained_error_analysis_column_count"] == 4
+
+
 def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     parser = build_arg_parser()
     args = parser.parse_args(["data.csv"])

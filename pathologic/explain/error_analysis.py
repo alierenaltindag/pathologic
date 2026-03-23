@@ -75,6 +75,8 @@ class MultiDimensionalErrorAnalyzer:
             "REVEL_Score",
             "dbnsfp.sift.score",
             "GERP_Score",
+            "gnomAD_log",
+            "gnomAD_is_zero",
             "gnomAD_AF",
             "Grantham_Score",
             "Shannon_Entropy",
@@ -419,8 +421,17 @@ class MultiDimensionalErrorAnalyzer:
             "total": int(len(error_frame))
         }
 
-        # 1. Population Frequency (gnomAD_AF)
-        col_af = self._resolve_feature_column(error_frame, "gnomAD_AF")
+        # 1. Population Frequency (prefer engineered gnomAD features)
+        af_source = "gnomAD_AF"
+        col_af = self._resolve_feature_column(error_frame, "gnomAD_log")
+        if col_af:
+            af_source = "gnomAD_log"
+        else:
+            col_af = self._resolve_feature_column(error_frame, "gnomAD_is_zero")
+            if col_af:
+                af_source = "gnomAD_is_zero"
+            else:
+                col_af = self._resolve_feature_column(error_frame, "gnomAD_AF")
         if col_af:
             af_vals = pd.to_numeric(error_frame[col_af], errors="coerce")
             non_null = af_vals.dropna()
@@ -446,6 +457,10 @@ class MultiDimensionalErrorAnalyzer:
                         "total": int(len(error_frame)),
                     }
                 }
+            elif af_source == "gnomAD_is_zero":
+                _append_bucket(af_vals >= 0.5, "Zero AF")
+                _append_bucket((af_vals >= 0.0) & (af_vals < 0.5), "Non-Zero AF")
+                _append_bucket(af_vals.isna() | (af_vals < 0.0), "Missing/Invalid")
             else:
                 # If AF is already probability-like [0, 1], use biological bins.
                 is_probability_like = bool(((non_null >= 0.0) & (non_null <= 1.0)).all())
@@ -467,6 +482,7 @@ class MultiDimensionalErrorAnalyzer:
                     _append_bucket(af_vals.isna(), "Missing/Invalid")
 
             results["population_frequency"] = freq_stats
+            results["population_frequency_source"] = af_source
 
         # 2. In-Silico Conflicts (REVEL vs CADD)
         col_revel = self._resolve_feature_column(error_frame, "REVEL_Score")

@@ -762,7 +762,7 @@ class ExplainabilityVisualizer:
             
             sections.append(
                 "<div class='card'>"
-                "<h3>Populasyon Sikligi (gnomAD_AF) Bazlı Hata Analizi</h3>"
+                "<h3>Populasyon Sikligi Bazli Hata Analizi</h3>"
                 "<table><thead><tr><th>Frekans Araligi</th><th>FP Sayısı</th><th>FN Sayısı</th><th>Toplam Hata</th></tr></thead>"
                 f"<tbody>{af_rows}</tbody></table></div>"
             )

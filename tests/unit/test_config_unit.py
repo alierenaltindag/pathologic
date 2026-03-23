@@ -68,3 +68,29 @@ def test_error_analysis_columns_propagate_to_explain_group_columns() -> None:
 
     assert "Veri_Kaynagi_Paneli" in explain_config["group_columns"]
     assert "Veri_Kaynagi_Paneli" in explain_config["false_positive"]["group_columns"]
+
+
+def test_defaults_data_schema_matches_engineered_feature_contract() -> None:
+    model = PathoLogic("logreg")
+    data_config = model.defaults["data"]
+
+    required_features = list(data_config["required_features"])
+    excluded_columns = list(data_config["excluded_columns"])
+    error_columns = list(data_config["error_analysis_columns"])
+
+    assert "gnomAD_log" in required_features
+    assert "gnomAD_is_zero" in required_features
+    assert "cpg_flag" in required_features
+    assert "proline_intro" in required_features
+    assert "cysteine_intro" in required_features
+    assert "proline_remove" in required_features
+    assert "gnomAD_AF" not in required_features
+
+    assert "Protein change" in excluded_columns
+    assert "VariationID" in excluded_columns
+    assert "AA_Position" in excluded_columns
+
+    assert "VariationID" in error_columns
+    assert "Gene(s)" in error_columns
+    assert "Protein change" in error_columns
+    assert "Veri_Kaynagi_Paneli" in error_columns

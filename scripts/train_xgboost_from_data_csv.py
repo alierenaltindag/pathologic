@@ -56,11 +56,20 @@ def prepare_dataset_for_pathologic(
 
     gene_col = _pick_first_existing(cols, ["gene_id", "Gene(s)"])
     label_col = _pick_first_existing(cols, ["label", "Target"])
+    excluded_columns = {
+        "VariationID",
+        "Protein change",
+        "Gene(s)",
+        "Veri_Kaynagi_Paneli",
+        "AA_Position",
+        "DNA_Context",
+        "Protein_Context",
+    }
 
     raw_feature_columns = [
         column
         for column in cols
-        if column not in {gene_col, label_col}
+        if column not in {gene_col, label_col} and column not in excluded_columns
     ]
     if not raw_feature_columns:
         raise ValueError("No feature columns found after removing gene/label columns.")

@@ -2,33 +2,34 @@
 
 ## Required Columns
 
-- `variant_id`: unique row identifier
-- `gene_id`: group identifier for leakage-safe splitting
-- `label`: binary target (0/1)
-- feature columns listed under `data.required_features`
+- `Target`: binary target (0/1)
+- `Gene(s)`: group identifier for leakage-safe splitting
+- engineered feature columns listed under `data.required_features`
 
 Default config reference: [pathologic/configs/defaults.yaml](pathologic/configs/defaults.yaml).
 
 ## Minimal Example
 
 ```csv
-variant_id,gene_id,label,REVEL_Score,cadd.phred
-v1,G1,1,0.91,28.4
-v2,G1,0,0.07,7.2
-v3,G2,1,0.84,24.8
-v4,G2,0,0.15,10.1
+VariationID,Gene(s),Target,REVEL_Score,cadd.phred,gnomAD_is_zero,gnomAD_log,cpg_flag,proline_intro,cysteine_intro,proline_remove
+v1,G1,1,0.91,28.4,1,-8.0,1,0,0,0
+v2,G1,0,0.07,7.2,0,-2.1,0,1,0,1
+v3,G2,1,0.84,24.8,0,-3.2,1,0,1,0
+v4,G2,0,0.15,10.1,0,-1.4,0,0,0,0
 ```
 
-## Optional Columns
+## Metadata Columns (Not Used For Training)
 
-- `domain_id`
-- `protein_family`
+- `VariationID`
+- `Gene(s)`
+- `Protein change`
+- `Veri_Kaynagi_Paneli`
 
-These improve grouped error analysis and explainability hotspots.
+These are retained for explainability and error analysis reporting.
 
 ## Split and Leakage Rules
 
-- If `gene_id` exists, grouped split is used by default.
+- If `Gene(s)` exists, grouped split is used by default.
 - The same gene must not appear in both train and validation folds.
 - Preprocessing artifacts are fit on train fold only.
 
@@ -47,9 +48,17 @@ Test references:
 
 ```yaml
 data:
-  label_column: label
-  gene_column: gene_id
+  label_column: Target
+  gene_column: Gene(s)
   required_features:
-    - revel_score
-    - cadd_phred
+    - REVEL_Score
+    - cadd.phred
+    - gnomAD_is_zero
+    - gnomAD_log
+    - cpg_flag
+  excluded_columns:
+    - VariationID
+    - Protein change
+    - Gene(s)
+    - Veri_Kaynagi_Paneli
 ```
