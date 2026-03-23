@@ -78,9 +78,12 @@ early_stopping:
 
 class_imbalance:
   enabled: true
-  mode: balanced
+  # [balanced/scale_pos_weight]
+  # scale_pos_weight: xgboost/lightgbm icin negatif/pozitif oranini uygular.
+  mode: scale_pos_weight
   # Opsiyonel: pozitif sinif agirligini sabitlemek icin kullanilir.
-  positive_class_weight:
+  # Bu veri setindeki dengesizlik icin (67.5/32.5) yaklasik oran.
+  positive_class_weight: 2.08
 
 # Global optimizer varsayılanları (model bazında override edilebilir).
 optimizer:

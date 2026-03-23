@@ -26,8 +26,11 @@ early_stopping:
 
 class_imbalance:
   enabled: true
-  mode: balanced
-  positive_class_weight:
+  # [balanced/scale_pos_weight]
+  # scale_pos_weight: xgboost/lightgbm icin negatif/pozitif oranini uygular.
+  mode: scale_pos_weight
+  # Bu veri setindeki dengesizlik icin (67.5/32.5) yaklasik oran.
+  positive_class_weight: 2.08
 
 # Opsiyonel tune-time preprocess override bloklari.
 # Bos birakildiginda train.preprocess varsayimlari kullanilir.

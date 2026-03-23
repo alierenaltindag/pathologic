@@ -1542,7 +1542,7 @@ class PathoLogic:
             return
 
         mode = str(class_imbalance_config.get("mode", "balanced")).strip().lower()
-        if mode != "balanced":
+        if mode not in {"balanced", "scale_pos_weight"}:
             return
 
         explicit_weight = class_imbalance_config.get("positive_class_weight")
@@ -1553,15 +1553,15 @@ class PathoLogic:
 
         if "+" in self.model_name:
             for alias in parse_hybrid_alias(self.model_name):
-                if alias == "xgboost":
+                if alias in {"xgboost", "lightgbm"}:
                     model_params.setdefault(f"member__{alias}__scale_pos_weight", scale_pos_weight)
-                elif alias in {"catboost", "logreg", "random_forest", "tabnet"}:
+                elif mode == "balanced" and alias in {"catboost", "logreg", "random_forest", "tabnet"}:
                     model_params.setdefault(f"member__{alias}__class_weight", "balanced")
             return
 
-        if self.model_name == "xgboost":
+        if self.model_name in {"xgboost", "lightgbm"}:
             model_params.setdefault("scale_pos_weight", scale_pos_weight)
-        elif self.model_name in {"catboost", "logreg", "random_forest", "tabnet"}:
+        elif mode == "balanced" and self.model_name in {"catboost", "logreg", "random_forest", "tabnet"}:
             model_params.setdefault("class_weight", "balanced")
 
     @staticmethod
