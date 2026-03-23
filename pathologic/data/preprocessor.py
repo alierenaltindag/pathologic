@@ -14,7 +14,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 ScalerName = Literal["standard", "minmax"]
 ImputeName = Literal["none", "mean", "median", "most_frequent"]
-MissingValuePolicy = Literal["impute", "drop_rows"]
+MissingValuePolicy = Literal["impute", "drop_rows", "none"]
 
 
 @dataclass
@@ -65,6 +65,7 @@ class FoldPreprocessor:
         self.fitted = False
 
         self._validate_feature_subsets()
+        self._apply_missing_policy_overrides()
         self._resolve_feature_scopes()
         self._validate_missing_value_policy()
 
@@ -77,7 +78,7 @@ class FoldPreprocessor:
         fit_df = self._prepare_input_frame(train_df, require_non_empty=True)
         self._fit_missing_indicators(fit_df)
 
-        if self.impute_strategy == "none":
+        if self._is_imputation_disabled():
             self.imputer = None
             train_imputed = fit_df[self.numeric_features].copy()
         else:
@@ -119,7 +120,7 @@ class FoldPreprocessor:
             raise RuntimeError("Call fit(...) before transform(...).")
         transform_df = self._prepare_input_frame(df, require_non_empty=False)
 
-        if self.impute_strategy == "none":
+        if self._is_imputation_disabled():
             imputed = transform_df[self.numeric_features].copy()
         else:
             if self.imputer is None:
@@ -321,9 +322,19 @@ class FoldPreprocessor:
         self._per_gene_feature_names = []
         self._global_scaler_features = []
 
+    def _apply_missing_policy_overrides(self) -> None:
+        """Apply policy-level behavior before deriving feature scopes."""
+        if self.missing_value_policy != "none":
+            return
+
+        # In strict no-op mode, keep missing values untouched and skip normalization.
+        self.per_gene = False
+        self.per_gene_features = []
+        self.scaler_features = []
+
     def _validate_missing_for_scaling(self, frame: pd.DataFrame) -> None:
         """Disallow scaler/per-gene normalization with NaN when imputation is disabled."""
-        if self.impute_strategy != "none":
+        if not self._is_imputation_disabled():
             return
 
         checked_features: list[str]
@@ -383,10 +394,13 @@ class FoldPreprocessor:
         return f"{feature}__is_missing"
 
     def _validate_missing_value_policy(self) -> None:
-        if self.missing_value_policy not in {"impute", "drop_rows"}:
+        if self.missing_value_policy not in {"impute", "drop_rows", "none"}:
             raise ValueError(
-                "missing_value_policy must be one of: impute, drop_rows"
+                "missing_value_policy must be one of: drop_rows, impute, none"
             )
+
+    def _is_imputation_disabled(self) -> bool:
+        return self.missing_value_policy == "none" or self.impute_strategy == "none"
 
     def _prepare_input_frame(self, df: pd.DataFrame, *, require_non_empty: bool) -> pd.DataFrame:
         self._validate_columns(df)

@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.utils.class_weight import compute_sample_weight
@@ -133,7 +134,30 @@ class TabNetWrapper:
                 max_iter=fallback_max_iter,
             )
 
+    @staticmethod
+    def _to_numpy_features(x: Any) -> np.ndarray:
+        if isinstance(x, pd.DataFrame):
+            return x.to_numpy(dtype=float)
+        if isinstance(x, pd.Series):
+            return x.to_numpy(dtype=float).reshape(-1, 1)
+        if isinstance(x, np.ndarray):
+            return x
+        return np.asarray(x)
+
+    @staticmethod
+    def _to_numpy_labels(y: Any) -> np.ndarray:
+        if isinstance(y, pd.DataFrame):
+            return y.to_numpy().reshape(-1)
+        if isinstance(y, pd.Series):
+            return y.to_numpy().reshape(-1)
+        if isinstance(y, np.ndarray):
+            return y.reshape(-1)
+        return np.asarray(y).reshape(-1)
+
     def fit(self, x: np.ndarray, y: np.ndarray) -> TabNetWrapper:
+        x_np = self._to_numpy_features(x)
+        y_np = self._to_numpy_labels(y)
+
         if self._is_native_tabnet:
             patience = int(self._early_stopping_cfg.get("patience", self._patience))
             early_enabled = bool(self._early_stopping_cfg.get("enabled", True))
@@ -145,14 +169,14 @@ class TabNetWrapper:
                 "batch_size": self._batch_size,
                 "virtual_batch_size": self._virtual_batch_size,
             }
-            if early_enabled and 0.0 < validation_split < 1.0 and len(x) > 4:
+            if early_enabled and 0.0 < validation_split < 1.0 and len(x_np) > 4:
                 stratify_target: np.ndarray | None = None
-                if np.unique(y).size > 1:
-                    stratify_target = y
+                if np.unique(y_np).size > 1:
+                    stratify_target = y_np
                 try:
                     x_train, x_val, y_train, y_val = train_test_split(
-                        x,
-                        y,
+                        x_np,
+                        y_np,
                         test_size=validation_split,
                         random_state=self._random_state,
                         stratify=stratify_target,
@@ -163,17 +187,17 @@ class TabNetWrapper:
                 except Exception:
                     pass
 
-            self.estimator.fit(x, y, **fit_kwargs)
+            self.estimator.fit(x_np, y_np, **fit_kwargs)
             return self
 
         sample_weight = None
         if self._class_weight == "balanced":
-            sample_weight = compute_sample_weight(class_weight="balanced", y=y)
+            sample_weight = compute_sample_weight(class_weight="balanced", y=y_np)
 
         if sample_weight is not None:
-            self.estimator.fit(x, y, sample_weight=sample_weight)
+            self.estimator.fit(x_np, y_np, sample_weight=sample_weight)
         else:
-            self.estimator.fit(x, y)
+            self.estimator.fit(x_np, y_np)
         return self
 
     def _resolve_native_optimizer(self) -> tuple[Any, dict[str, Any]]:
@@ -257,13 +281,15 @@ class TabNetWrapper:
         return scheduler_fn, params
 
     def predict(self, x: np.ndarray) -> np.ndarray:
-        predictions = self.estimator.predict(x)
+        predictions = self.estimator.predict(self._to_numpy_features(x))
         return np.asarray(predictions).reshape(-1)
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         if hasattr(self.estimator, "predict_proba"):
-            return np.asarray(self.estimator.predict_proba(x))
+            return np.asarray(self.estimator.predict_proba(self._to_numpy_features(x)))
 
-        logits = np.asarray(self.estimator.decision_function(x)).reshape(-1)
+        logits = np.asarray(
+            self.estimator.decision_function(self._to_numpy_features(x))
+        ).reshape(-1)
         probs = 1.0 / (1.0 + np.exp(-logits))
         return np.column_stack([1.0 - probs, probs])

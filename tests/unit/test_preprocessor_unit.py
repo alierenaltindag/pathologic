@@ -127,6 +127,42 @@ def test_impute_none_keeps_missing_when_no_scaling(variant_frame: pd.DataFrame) 
     assert transformed["cadd_phred"].isna().sum() > 0
 
 
+def test_missing_value_policy_none_skips_imputation(variant_frame: pd.DataFrame) -> None:
+    train_df = variant_frame.iloc[:6].copy()
+
+    processor = FoldPreprocessor(
+        numeric_features=["revel_score", "cadd_phred"],
+        missing_value_policy="none",
+        impute_strategy="median",
+        scaler="standard",
+        per_gene=False,
+        scaler_features=[],
+    )
+    transformed = processor.fit_transform(train_df)
+
+    assert transformed["revel_score"].isna().sum() > 0
+    assert transformed["cadd_phred"].isna().sum() > 0
+
+
+def test_missing_value_policy_none_disables_scaling_and_per_gene_automatically(
+    variant_frame: pd.DataFrame,
+) -> None:
+    train_df = variant_frame.iloc[:6].copy()
+
+    processor = FoldPreprocessor(
+        numeric_features=["revel_score", "cadd_phred"],
+        missing_value_policy="none",
+        impute_strategy="median",
+        scaler="standard",
+        per_gene=True,
+    )
+
+    transformed = processor.fit_transform(train_df)
+
+    assert transformed["revel_score"].isna().sum() > 0
+    assert transformed["cadd_phred"].isna().sum() > 0
+
+
 def test_impute_none_with_scaling_and_missing_raises(variant_frame: pd.DataFrame) -> None:
     train_df = variant_frame.iloc[:6].copy()
 

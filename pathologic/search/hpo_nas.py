@@ -304,11 +304,22 @@ def build_nas_arrays(
     if not isinstance(preprocess_cfg, dict):
         preprocess_cfg = {}
 
+    tabnet_missingness_mode = str(
+        preprocess_cfg.get("tabnet_missingness_mode", "auto")
+    ).strip().lower()
+    if tabnet_missingness_mode == "auto":
+        preprocess_cfg = dict(preprocess_cfg)
+        preprocess_cfg["missing_value_policy"] = "impute"
+        preprocess_cfg["impute_strategy"] = str(
+            preprocess_cfg.get("tabnet_impute_strategy", "median")
+        )
+        preprocess_cfg["add_missing_indicators"] = True
+
     missing_value_policy = str(preprocess_cfg.get("missing_value_policy", "impute"))
-    if missing_value_policy not in {"impute", "drop_rows"}:
+    if missing_value_policy not in {"impute", "drop_rows", "none"}:
         raise ValueError(
             "Config field 'preprocess.missing_value_policy' must be one of: "
-            "drop_rows, impute"
+            "drop_rows, impute, none"
         )
 
     processor = FoldPreprocessor(

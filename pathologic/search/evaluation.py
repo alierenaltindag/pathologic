@@ -74,15 +74,26 @@ def _emit_gpu_capability_warnings(
             )
 
     if cpu_only:
-        emit(
-            (
-                f"[gpu-warning] candidate={candidate.name} CPU-only model(s): "
-                + ", ".join(cpu_only)
-                + ". GPU acceleration is not available for these aliases in this codebase."
-            ),
-            color="yellow",
-            run_logger=run_logger,
-        )
+        if gpu_capable:
+            emit(
+                (
+                    f"[gpu-warning] candidate={candidate.name} CPU-only model(s): "
+                    + ", ".join(cpu_only)
+                    + ". GPU acceleration is not available for these aliases in this codebase."
+                ),
+                color="yellow",
+                run_logger=run_logger,
+            )
+        else:
+            emit(
+                (
+                    f"[gpu] candidate={candidate.name} CPU-only model(s): "
+                    + ", ".join(cpu_only)
+                    + ". This is expected for these aliases in this codebase."
+                ),
+                color="cyan",
+                run_logger=run_logger,
+            )
 
     if gpu_capable:
         emit(

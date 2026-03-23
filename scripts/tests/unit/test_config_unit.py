@@ -44,7 +44,7 @@ def test_model_loads_defaults_on_init() -> None:
     assert "epochs" in model.defaults["train"]
     assert "preprocess" in model.defaults["train"]
     preprocess = model.defaults["train"]["preprocess"]
-    assert preprocess["missing_value_policy"] == "drop_rows"
+    assert preprocess["missing_value_policy"] == "none"
     assert preprocess["add_missing_indicators"] is False
     assert preprocess["tabnet_missingness_mode"] == "auto"
     assert preprocess["tabnet_impute_strategy"] == "median"

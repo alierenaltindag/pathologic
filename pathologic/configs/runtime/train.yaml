@@ -38,10 +38,11 @@ split:
 
 # Ön işleme adımlarının varsayılan davranışını belirler.
 preprocess:
-  # Eksik deger stratejisi. [impute/drop_rows]
+  # Eksik deger stratejisi. [impute/drop_rows/none]
   # impute: impute_strategy ile doldurur.
   # drop_rows: sayisal ozelliklerde eksik olan satirlari dusurur.
-  missing_value_policy: impute
+  # none: eksik degerlere hic dokunmaz.
+  missing_value_policy: none
   # Eksik değer doldurma yöntemi. [none/mean/median/most_frequent]
   # none: eksik değerleri olduğu gibi bırakır.
   impute_strategy: median

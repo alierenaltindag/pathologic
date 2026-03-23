@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from pathologic.search import hpo_nas as _search_hpo_nas
 from pathologic.search.spec import CandidateSpec
 
@@ -134,3 +136,40 @@ def test_build_hybrid_neural_nas_search_space_filters_non_neural_member_keys() -
     assert "member__tabnet__n_steps" in filtered
     assert "member__xgboost__max_depth" not in filtered
     assert "strategy" not in filtered
+
+
+def test_build_nas_arrays_applies_tabnet_auto_missingness_policy(monkeypatch) -> None:
+    train_df = pd.DataFrame(
+        {
+            "label": [0, 1, 0, 1, 0, 1],
+            "gene_id": ["g1", "g1", "g2", "g2", "g3", "g3"],
+            "feature__a": [1.0, None, 3.0, 4.0, None, 6.0],
+            "feature__b": [0.1, 0.2, None, 0.4, 0.5, None],
+        }
+    )
+
+    class _FakePathoLogic:
+        def __init__(self, _alias: str) -> None:
+            self.defaults = {
+                "train": {
+                    "preprocess": {
+                        "missing_value_policy": "none",
+                        "impute_strategy": "none",
+                        "tabnet_missingness_mode": "auto",
+                        "tabnet_impute_strategy": "median",
+                    }
+                }
+            }
+
+    monkeypatch.setattr("pathologic.search.hpo_nas.PathoLogic", _FakePathoLogic)
+
+    x_train, y_train, x_val, y_val = _search_hpo_nas.build_nas_arrays(
+        train_df=train_df,
+        feature_columns=["feature__a", "feature__b"],
+        seed=42,
+    )
+
+    assert x_train.shape[0] > 0
+    assert x_val.shape[0] > 0
+    assert y_train.shape[0] == x_train.shape[0]
+    assert y_val.shape[0] == x_val.shape[0]

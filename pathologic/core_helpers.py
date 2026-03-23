@@ -334,7 +334,7 @@ def validate_preprocess_options(preprocess_config: dict[str, Any]) -> tuple[str,
     missing_value_policy_raw = str(preprocess_config.get("missing_value_policy", "impute"))
     impute_strategy_raw = str(preprocess_config.get("impute_strategy", "none"))
     scaler_raw = str(preprocess_config.get("scaler", "standard"))
-    allowed_policies = {"impute", "drop_rows"}
+    allowed_policies = {"impute", "drop_rows", "none"}
     allowed_imputers = {"none", "mean", "median", "most_frequent"}
     allowed_scalers = {"standard", "minmax"}
     if missing_value_policy_raw not in allowed_policies:

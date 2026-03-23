@@ -25,6 +25,8 @@ class LightGBMWrapper:
     HistGradientBoostingClassifier for bootstrap environments.
     """
 
+    _cuda_backend_status: str = "unknown"
+
     def __init__(
         self,
         *,
@@ -78,15 +80,20 @@ class LightGBMWrapper:
                 params["class_weight"] = class_weight
 
             # Hardware detection
-            preferred_device = device
+            preferred_device = str(device).strip().lower() if device is not None else None
             if preferred_device is None:
                 detected = detect_preferred_device()
                 if detected == "cuda":
                     preferred_device = "cuda"
+                else:
+                    preferred_device = None
             
             if preferred_device == "cuda":
-                # Prefer native CUDA build when available.
-                params["device_type"] = "cuda"
+                if type(self)._cuda_backend_status == "unsupported":
+                    params["device"] = "gpu"
+                else:
+                    # Prefer native CUDA build when available.
+                    params["device_type"] = "cuda"
             elif preferred_device in {"gpu", "opencl"}:
                 params["device"] = "gpu"
             
@@ -149,7 +156,17 @@ class LightGBMWrapper:
         )
         return any(pattern in message for pattern in patterns)
 
-    def _fallback_estimator_to_cpu(self) -> bool:
+    @staticmethod
+    def _is_lgbm_cuda_tree_not_enabled_failure(exc: Exception) -> bool:
+        message = str(exc).strip().lower()
+        if not message:
+            return False
+        return (
+            "cuda tree learner was not enabled in this build" in message
+            or "recompile with cmake option -duse_cuda=1" in message
+        )
+
+    def _fallback_estimator_for_runtime_failure(self, exc: Exception) -> bool:
         if self._using_fallback or self._lgbm_classifier is None:
             return False
 
@@ -158,6 +175,20 @@ class LightGBMWrapper:
         device_type = str(current_params.get("device_type", "")).strip().lower()
         if device not in {"gpu", "cuda"} and device_type not in {"gpu", "cuda"}:
             return False
+
+        if device_type == "cuda" and self._is_lgbm_cuda_tree_not_enabled_failure(exc):
+            type(self)._cuda_backend_status = "unsupported"
+            opencl_params = dict(current_params)
+            opencl_params.pop("device_type", None)
+            opencl_params["device"] = "gpu"
+            try:
+                self.estimator = self._lgbm_classifier(**opencl_params)
+                _LOGGER.warning(
+                    "LightGBM CUDA build is unavailable; retrying with OpenCL GPU backend."
+                )
+                return True
+            except Exception:
+                pass
 
         current_params.pop("device", None)
         current_params.pop("device_type", None)
@@ -168,13 +199,19 @@ class LightGBMWrapper:
         return True
 
     def _fit_with_gpu_fallback(self, x: Any, y: Any, **kwargs: Any) -> None:
-        try:
-            self.estimator.fit(x, y, **kwargs)
-        except Exception as exc:
-            if self._is_lgbm_gpu_runtime_failure(exc) and self._fallback_estimator_to_cpu():
+        attempts = 0
+        while attempts < 3:
+            attempts += 1
+            try:
                 self.estimator.fit(x, y, **kwargs)
                 return
-            raise
+            except Exception as exc:
+                if (
+                    self._is_lgbm_gpu_runtime_failure(exc)
+                    and self._fallback_estimator_for_runtime_failure(exc)
+                ):
+                    continue
+                raise
 
     def fit(self, X: Any, y: Any, **kwargs: Any) -> LightGBMWrapper:
         """Fit the underlying estimator with optional early stopping."""
