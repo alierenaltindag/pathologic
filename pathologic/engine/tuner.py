@@ -267,7 +267,7 @@ class Tuner:
                 else:
                     non_improving_trials += 1
 
-                ppbar.update(1)
+                bar.update(1)
                 bar.set_postfix(best=f"{best_score:.4f}")
 
                 if es_enabled and non_improving_trials >= es_patience:
