@@ -843,11 +843,8 @@ class ExplainabilityVisualizer:
             total_samples = int(row.get("total_samples", 0))
             correct_predictions = int(row.get("correct_predictions", 0))
             incorrect_predictions = int(row.get("incorrect_predictions", 0))
-<<<<<<< HEAD
             fp_count = int(row.get("fp_count", 0))
             fn_count = int(row.get("fn_count", 0))
-=======
->>>>>>> 55309dc0c81e3d31e124478c737165369379fed6
             accuracy = float(row.get("accuracy", 0.0))
             table_rows.append(
                 "<tr>"
@@ -855,11 +852,8 @@ class ExplainabilityVisualizer:
                 f"<td>{total_samples}</td>"
                 f"<td>{correct_predictions}</td>"
                 f"<td>{incorrect_predictions}</td>"
-<<<<<<< HEAD
                 f"<td>{fp_count}</td>"
                 f"<td>{fn_count}</td>"
-=======
->>>>>>> 55309dc0c81e3d31e124478c737165369379fed6
                 f"<td>{accuracy:.3f}</td>"
                 "</tr>"
             )
@@ -870,15 +864,9 @@ class ExplainabilityVisualizer:
         return (
             "<div class='card'>"
             "<h2>Panel Bazli Performans (Veri_Kaynagi_Paneli)</h2>"
-<<<<<<< HEAD
             "<p>Her panel icin toplam ornek, dogru tahmin, hatali tahmin, FP ve FN sayisi.</p>"
             "<table><thead><tr>"
             "<th>Panel</th><th>Toplam Ornek</th><th>Dogru Tahmin</th><th>Hatali Tahmin</th><th>FP</th><th>FN</th><th>Dogruluk</th>"
-=======
-            "<p>Her panel icin toplam ornek, dogru tahmin ve hata sayisi.</p>"
-            "<table><thead><tr>"
-            "<th>Panel</th><th>Toplam Ornek</th><th>Dogru Tahmin</th><th>Hatali Tahmin</th><th>Dogruluk</th>"
->>>>>>> 55309dc0c81e3d31e124478c737165369379fed6
             "</tr></thead><tbody>"
             + "".join(table_rows)
             + "</tbody></table></div>"
