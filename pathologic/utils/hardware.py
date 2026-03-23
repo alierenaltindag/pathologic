@@ -19,7 +19,7 @@ def detect_preferred_device() -> str:
     mps_backend = getattr(torch.backends, "mps", None)
     if mps_backend and mps_backend.is_available():
         # MAC_OPTIMIZATION: Explicitly detect and return 'mps' to enable
-        # Apple Neural Engine (M1/M2/M3/M4) hardware acceleration in PyTorch.
+        # Apple Silicon GPU acceleration via Metal (MPS) in PyTorch.
         return "mps"
 
     return "cpu"
