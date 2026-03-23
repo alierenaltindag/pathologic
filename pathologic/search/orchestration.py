@@ -70,38 +70,40 @@ def run_candidate_search_loop(
                     candidate_bar=candidate_bar,
                     run_logger=run_logger,
                 )
+                try:
+                    if not show_candidate_progress:
+                        emit(
+                            f"[{index}/{len(candidates)}] Evaluating {candidate.name}",
+                            color="cyan",
+                            bold=True,
+                            run_logger=run_logger,
+                        )
 
-                if not show_candidate_progress:
-                    emit(
-                        f"[{index}/{len(candidates)}] Evaluating {candidate.name}",
-                        color="cyan",
-                        bold=True,
+                    row, model = _search_evaluation.evaluate_candidate(
+                        candidate=candidate,
+                        args=args,
+                        budget=budget,
+                        quiet_inner_search=quiet_inner_search,
+                        outer_train_csv=outer_train_csv,
+                        outer_test_csv=outer_test_csv,
+                        outer_test_df=outer_test_df,
+                        outer_calibration_df=outer_calibration_df,
+                        run_dir=run_dir,
+                        feature_columns=feature_columns,
+                        cv_splits=cv_splits,
+                        x_train_nas=x_train_nas,
+                        y_train_nas=y_train_nas,
+                        x_val_nas=x_val_nas,
+                        y_val_nas=y_val_nas,
+                        stage_update=tracker.update,
                         run_logger=run_logger,
+                        step_start=step_start,
                     )
-
-                row, model = _search_evaluation.evaluate_candidate(
-                    candidate=candidate,
-                    args=args,
-                    budget=budget,
-                    quiet_inner_search=quiet_inner_search,
-                    outer_train_csv=outer_train_csv,
-                    outer_test_csv=outer_test_csv,
-                    outer_test_df=outer_test_df,
-                    outer_calibration_df=outer_calibration_df,
-                    run_dir=run_dir,
-                    feature_columns=feature_columns,
-                    cv_splits=cv_splits,
-                    x_train_nas=x_train_nas,
-                    y_train_nas=y_train_nas,
-                    x_val_nas=x_val_nas,
-                    y_val_nas=y_val_nas,
-                    stage_update=tracker.update,
-                    run_logger=run_logger,
-                    step_start=step_start,
-                )
-                if model is not None:
-                    successful_models[candidate.name] = model
-                    tracker.update("candidate", state="done")
+                    if model is not None:
+                        successful_models[candidate.name] = model
+                        tracker.update("candidate", state="done")
+                finally:
+                    tracker.close()
 
             leaderboard.append(row)
             candidate_bar.update(1)
