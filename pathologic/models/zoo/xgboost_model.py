@@ -6,6 +6,7 @@ import importlib
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.model_selection import train_test_split
 
@@ -98,6 +99,54 @@ class XGBoostWrapper:
             )
             self.estimator = HistGradientBoostingClassifier(random_state=random_state)
 
+    def _uses_cuda_backend(self) -> bool:
+        estimator = getattr(self, "estimator", None)
+        if estimator is None:
+            return False
+
+        try:
+            xgb_params = estimator.get_xgb_params()
+            if str(xgb_params.get("device", "")).strip().lower() == "cuda":
+                return True
+        except Exception:
+            pass
+
+        try:
+            params = estimator.get_params()
+            if str(params.get("device", "")).strip().lower() == "cuda":
+                return True
+        except Exception:
+            pass
+
+        return False
+
+    def _to_gpu_inference_input(self, x: Any) -> Any:
+        if not self._uses_cuda_backend():
+            return x
+
+        # Use cudf/cupy when available to avoid host-device mismatch warnings at inference time.
+        if isinstance(x, pd.DataFrame):
+            try:
+                cudf = importlib.import_module("cudf")
+                return cudf.DataFrame.from_pandas(x)
+            except Exception:
+                pass
+
+            try:
+                cupy = importlib.import_module("cupy")
+                return cupy.asarray(x.to_numpy(dtype=float))
+            except Exception:
+                return x
+
+        if isinstance(x, np.ndarray):
+            try:
+                cupy = importlib.import_module("cupy")
+                return cupy.asarray(x)
+            except Exception:
+                return x
+
+        return x
+
     def fit(self, x: np.ndarray, y: np.ndarray) -> XGBoostWrapper:
         early_enabled = bool(self._early_stopping_cfg.get("enabled", False))
         if not early_enabled or not hasattr(self.estimator, "fit"):
@@ -142,11 +191,23 @@ class XGBoostWrapper:
         return self
 
     def predict(self, x: np.ndarray) -> np.ndarray:
-        return np.asarray(self.estimator.predict(x)).reshape(-1)
+        gpu_x = self._to_gpu_inference_input(x)
+        try:
+            return np.asarray(self.estimator.predict(gpu_x)).reshape(-1)
+        except Exception:
+            return np.asarray(self.estimator.predict(x)).reshape(-1)
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
         if hasattr(self.estimator, "predict_proba"):
-            return np.asarray(self.estimator.predict_proba(x))
-        logits = np.asarray(self.estimator.decision_function(x)).reshape(-1)
+            gpu_x = self._to_gpu_inference_input(x)
+            try:
+                return np.asarray(self.estimator.predict_proba(gpu_x))
+            except Exception:
+                return np.asarray(self.estimator.predict_proba(x))
+        gpu_x = self._to_gpu_inference_input(x)
+        try:
+            logits = np.asarray(self.estimator.decision_function(gpu_x)).reshape(-1)
+        except Exception:
+            logits = np.asarray(self.estimator.decision_function(x)).reshape(-1)
         probs = 1.0 / (1.0 + np.exp(-logits))
         return np.column_stack([1.0 - probs, probs])

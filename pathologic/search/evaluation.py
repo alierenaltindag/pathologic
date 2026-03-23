@@ -127,7 +127,9 @@ def _emit_gpu_runtime_backend_warnings(
     if "lightgbm" in members:
         try:
             lgb_params = estimator.get_params()
-            if str(lgb_params.get("device", "")).strip().lower() != "gpu":
+            lgb_device = str(lgb_params.get("device", "")).strip().lower()
+            lgb_device_type = str(lgb_params.get("device_type", "")).strip().lower()
+            if lgb_device not in {"gpu", "cuda"} and lgb_device_type not in {"gpu", "cuda"}:
                 emit(
                     (
                         f"[gpu-warning] candidate={candidate.name} lightgbm backend "

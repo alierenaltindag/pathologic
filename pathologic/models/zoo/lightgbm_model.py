@@ -48,10 +48,12 @@ class LightGBMWrapper:
         self._using_fallback = False
         self._random_state = random_state
         self._early_stopping_cfg = dict(early_stopping or {})
+        self._lgbm_classifier: Any | None = None
         
         try:
             lgb_module = importlib.import_module("lightgbm")
             lgbm_classifier = lgb_module.LGBMClassifier
+            self._lgbm_classifier = lgbm_classifier
 
             params = {
                 "n_estimators": n_estimators,
@@ -82,16 +84,41 @@ class LightGBMWrapper:
                 if detected == "cuda":
                     preferred_device = "cuda"
             
-            if preferred_device in {"cuda", "gpu"}:
-                params["device"] = "gpu" # LightGBM uses 'gpu' for device param
+            if preferred_device == "cuda":
+                # Prefer native CUDA build when available.
+                params["device_type"] = "cuda"
+            elif preferred_device in {"gpu", "opencl"}:
+                params["device"] = "gpu"
             
             try:
                 self.estimator = lgbm_classifier(**params)
             except Exception as e:
-                _LOGGER.warning(f"Native lightgbm GPU init failed: {e}; falling back to CPU.")
-                if "device" in params:
-                    del params["device"]
-                self.estimator = lgbm_classifier(**params)
+                if preferred_device == "cuda":
+                    _LOGGER.warning(
+                        "Native lightgbm CUDA init failed: %s; retrying OpenCL GPU backend.",
+                        e,
+                    )
+                    alt_params = dict(params)
+                    alt_params.pop("device_type", None)
+                    alt_params["device"] = "gpu"
+                    try:
+                        self.estimator = lgbm_classifier(**alt_params)
+                    except Exception as gpu_exc:
+                        _LOGGER.warning(
+                            "Native lightgbm OpenCL init failed: %s; falling back to CPU.",
+                            gpu_exc,
+                        )
+                        cpu_params = dict(params)
+                        cpu_params.pop("device", None)
+                        cpu_params.pop("device_type", None)
+                        self.estimator = lgbm_classifier(**cpu_params)
+                else:
+                    _LOGGER.warning(f"Native lightgbm GPU init failed: {e}; falling back to CPU.")
+                    if "device" in params:
+                        del params["device"]
+                    if "device_type" in params:
+                        del params["device_type"]
+                    self.estimator = lgbm_classifier(**params)
 
         except (ImportError, Exception) as e:
             self._using_fallback = True
@@ -108,18 +135,59 @@ class LightGBMWrapper:
                 random_state=random_state
             )
 
+    @staticmethod
+    def _is_lgbm_gpu_runtime_failure(exc: Exception) -> bool:
+        message = str(exc).strip().lower()
+        if not message:
+            return False
+        patterns = (
+            "opencl",
+            "cuda",
+            "gpu",
+            "no opencl device found",
+            "cuda tree learner",
+        )
+        return any(pattern in message for pattern in patterns)
+
+    def _fallback_estimator_to_cpu(self) -> bool:
+        if self._using_fallback or self._lgbm_classifier is None:
+            return False
+
+        current_params = dict(getattr(self.estimator, "get_params", lambda: {})())
+        device = str(current_params.get("device", "")).strip().lower()
+        device_type = str(current_params.get("device_type", "")).strip().lower()
+        if device not in {"gpu", "cuda"} and device_type not in {"gpu", "cuda"}:
+            return False
+
+        current_params.pop("device", None)
+        current_params.pop("device_type", None)
+        self.estimator = self._lgbm_classifier(**current_params)
+        _LOGGER.warning(
+            "LightGBM GPU runtime failed; switched to CPU backend for this candidate."
+        )
+        return True
+
+    def _fit_with_gpu_fallback(self, x: Any, y: Any, **kwargs: Any) -> None:
+        try:
+            self.estimator.fit(x, y, **kwargs)
+        except Exception as exc:
+            if self._is_lgbm_gpu_runtime_failure(exc) and self._fallback_estimator_to_cpu():
+                self.estimator.fit(x, y, **kwargs)
+                return
+            raise
+
     def fit(self, X: Any, y: Any, **kwargs: Any) -> LightGBMWrapper:
         """Fit the underlying estimator with optional early stopping."""
         early_enabled = bool(self._early_stopping_cfg.get("enabled", False))
         if self._using_fallback or not early_enabled:
-            self.estimator.fit(X, y, **kwargs)
+            self._fit_with_gpu_fallback(X, y, **kwargs)
             return self
 
         validation_split = float(self._early_stopping_cfg.get("validation_split", 0.2))
         patience = int(self._early_stopping_cfg.get("patience", 10))
 
         if not (0.0 < validation_split < 1.0) or len(X) <= 4:
-            self.estimator.fit(X, y, **kwargs)
+            self._fit_with_gpu_fallback(X, y, **kwargs)
             return self
 
         stratify_target: np.ndarray | None = None
@@ -135,7 +203,7 @@ class LightGBMWrapper:
                 stratify=stratify_target,
             )
         except Exception:
-            self.estimator.fit(X, y, **kwargs)
+            self._fit_with_gpu_fallback(X, y, **kwargs)
             return self
 
         fit_kwargs: dict[str, Any] = {**kwargs, "eval_set": [(x_val, y_val)]}
@@ -143,16 +211,16 @@ class LightGBMWrapper:
             fit_kwargs["early_stopping_rounds"] = patience
 
         try:
-            self.estimator.fit(x_train, y_train, **fit_kwargs)
+            self._fit_with_gpu_fallback(x_train, y_train, **fit_kwargs)
         except TypeError:
             # Some versions have strict sklearn fit signatures; retry without the optional arg.
             fit_kwargs.pop("early_stopping_rounds", None)
             try:
-                self.estimator.fit(x_train, y_train, **fit_kwargs)
+                self._fit_with_gpu_fallback(x_train, y_train, **fit_kwargs)
             except Exception:
-                self.estimator.fit(X, y, **kwargs)
+                self._fit_with_gpu_fallback(X, y, **kwargs)
         except Exception:
-            self.estimator.fit(X, y, **kwargs)
+            self._fit_with_gpu_fallback(X, y, **kwargs)
         return self
 
     def predict(self, X: Any) -> np.ndarray:

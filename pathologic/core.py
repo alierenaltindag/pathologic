@@ -1473,7 +1473,7 @@ class PathoLogic:
                     merged.setdefault(f"member__{alias}__device", "cuda")
                     merged.setdefault(f"member__{alias}__tree_method", "hist")
                 elif alias == "lightgbm":
-                    merged.setdefault(f"member__{alias}__device", "gpu")
+                    merged.setdefault(f"member__{alias}__device", "cuda")
                 elif alias == "catboost":
                     merged.setdefault(f"member__{alias}__task_type", "GPU")
                 elif alias == "tabnet":
@@ -1484,7 +1484,7 @@ class PathoLogic:
             merged.setdefault("device", "cuda")
             merged.setdefault("tree_method", "hist")
         elif self.model_name == "lightgbm":
-            merged.setdefault("device", "gpu")
+            merged.setdefault("device", "cuda")
         elif self.model_name == "catboost":
             merged.setdefault("task_type", "GPU")
         elif self.model_name == "tabnet":
