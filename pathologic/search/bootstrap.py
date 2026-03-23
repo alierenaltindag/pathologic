@@ -116,6 +116,11 @@ def bootstrap_search_run(args: argparse.Namespace, *, budget: BudgetProfile) -> 
     outer_test_df.to_csv(outer_test_csv, index=False)
 
     include_models = parse_model_pool(args.model_pool)
+    explicit_candidates = (
+        [item.strip() for item in str(args.only_candidates).split(",") if item.strip()]
+        if getattr(args, "only_candidates", None)
+        else None
+    )
     regularization_models = parse_model_pool(getattr(args, "regularization_models", None))
     exclude_models = (
         [item.strip() for item in args.exclude_models.split(",") if item.strip()]
@@ -125,6 +130,7 @@ def bootstrap_search_run(args: argparse.Namespace, *, budget: BudgetProfile) -> 
 
     candidates = _search_candidate.build_candidate_specs(
         include_models=include_models,
+        explicit_candidates=explicit_candidates,
         exclude_models=exclude_models,
         include_hybrids=not args.disable_hybrids,
         max_hybrid_combination_size=int(getattr(args, "max_hybrid_combination_size", 2)),

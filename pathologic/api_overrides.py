@@ -99,6 +99,7 @@ class TrainOverrideKwargs(TypedDict, total=False):
     gpu_ids: list[int]
     ddp: DDPOverrides
     model_params: dict[str, Any]
+    validation_data: str
     learning_rate: float
     weight_decay: float
 

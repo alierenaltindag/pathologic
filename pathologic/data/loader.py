@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -104,6 +105,15 @@ def build_folds(
         splitter = GroupKFold(n_splits=n_splits)
         return list(splitter.split(df, y, groups=groups))
 
+    warnings.warn(
+        (
+            f"Gene column '{gene_column}' not found; falling back to non-grouped folds. "
+            "This may allow same-gene leakage across train/validation splits."
+        ),
+        UserWarning,
+        stacklevel=2,
+    )
+
     if stratified and _can_stratify(y, n_splits):
         splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
         return list(splitter.split(df, y))
@@ -192,6 +202,15 @@ def build_holdout_split(
         train_idx = train_val_idx[train_pos]
         val_idx = train_val_idx[val_pos]
         return {"train": train_idx, "val": val_idx, "test": test_idx}
+
+    warnings.warn(
+        (
+            f"Gene column '{gene_column}' not found; falling back to non-grouped holdout split. "
+            "This may allow same-gene leakage across train/validation/test splits."
+        ),
+        UserWarning,
+        stacklevel=2,
+    )
 
     if stratified and _can_stratify(y, n_splits=2):
         train_val_idx, test_idx = train_test_split(

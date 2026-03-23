@@ -131,6 +131,7 @@ def run_exhaustive_search(args: argparse.Namespace) -> dict[str, Any]:
         budget=budget,
         quiet_inner_search=context.quiet_inner_search,
         outer_train_csv=context.outer_train_csv,
+        outer_calibration_csv=context.outer_calibration_csv,
         outer_test_csv=context.outer_test_csv,
         outer_test_df=context.outer_test_df,
         outer_calibration_df=context.outer_calibration_df,

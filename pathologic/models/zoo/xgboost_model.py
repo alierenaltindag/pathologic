@@ -147,7 +147,14 @@ class XGBoostWrapper:
 
         return x
 
-    def fit(self, x: np.ndarray, y: np.ndarray) -> XGBoostWrapper:
+    def fit(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        *,
+        x_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+    ) -> XGBoostWrapper:
         early_enabled = bool(self._early_stopping_cfg.get("enabled", False))
         if not early_enabled or not hasattr(self.estimator, "fit"):
             self.estimator.fit(x, y)
@@ -155,6 +162,22 @@ class XGBoostWrapper:
 
         validation_split = float(self._early_stopping_cfg.get("validation_split", 0.2))
         patience = int(self._early_stopping_cfg.get("patience", 10))
+
+        if x_val is not None and y_val is not None and len(x_val) > 0:
+            fit_kwargs: dict[str, Any] = {"eval_set": [(x_val, y_val)]}
+            if patience > 0:
+                fit_kwargs["early_stopping_rounds"] = patience
+
+            try:
+                self.estimator.fit(x, y, verbose=False, **fit_kwargs)
+            except TypeError:
+                try:
+                    self.estimator.fit(x, y, **fit_kwargs)
+                except Exception:
+                    self.estimator.fit(x, y)
+            except Exception:
+                self.estimator.fit(x, y)
+            return self
 
         if not (0.0 < validation_split < 1.0) or len(x) <= 4:
             self.estimator.fit(x, y)

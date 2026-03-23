@@ -175,6 +175,16 @@ class ExplainabilityVisualizer:
             for item in bins:
                 if not isinstance(item, dict):
                     continue
+                avg_predicted = item.get("avg_predicted")
+                avg_observed = item.get("avg_observed")
+                abs_gap = item.get("abs_gap")
+                avg_predicted_text = (
+                    "-" if avg_predicted is None else f"{float(avg_predicted):.6f}"
+                )
+                avg_observed_text = (
+                    "-" if avg_observed is None else f"{float(avg_observed):.6f}"
+                )
+                abs_gap_text = "-" if abs_gap is None else f"{float(abs_gap):.6f}"
                 bin_rows.append(
                     "<tr>"
                     f"<td>{escape(method)}</td>"
@@ -182,9 +192,9 @@ class ExplainabilityVisualizer:
                     f"<td>{float(item.get('left', 0.0)):.4f}</td>"
                     f"<td>{float(item.get('right', 0.0)):.4f}</td>"
                     f"<td>{int(item.get('count', 0))}</td>"
-                    f"<td>{'-' if item.get('avg_predicted') is None else f'{float(item.get("avg_predicted", 0.0)):.6f}'}</td>"
-                    f"<td>{'-' if item.get('avg_observed') is None else f'{float(item.get("avg_observed", 0.0)):.6f}'}</td>"
-                    f"<td>{'-' if item.get('abs_gap') is None else f'{float(item.get("abs_gap", 0.0)):.6f}'}</td>"
+                    f"<td>{avg_predicted_text}</td>"
+                    f"<td>{avg_observed_text}</td>"
+                    f"<td>{abs_gap_text}</td>"
                     "</tr>"
                 )
         if not bin_rows:

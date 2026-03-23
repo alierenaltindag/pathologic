@@ -175,6 +175,7 @@ def evaluate_candidate(
     budget: BudgetProfile,
     quiet_inner_search: bool,
     outer_train_csv: Path,
+    outer_calibration_csv: Path,
     outer_test_csv: Path,
     outer_test_df: pd.DataFrame,
     outer_calibration_df: pd.DataFrame,
@@ -462,9 +463,15 @@ def evaluate_candidate(
             )
         elif run_nas_for_candidate:
             nas_result = _run_nas_stage(base_model_params={})
-            hpo_result = _run_hpo_stage(stage_name="hpo")
+            hpo_result = _run_hpo_stage(
+                stage_name="hpo",
+                search_space_override=search_space,
+            )
         else:
-            hpo_result = _run_hpo_stage(stage_name="hpo")
+            hpo_result = _run_hpo_stage(
+                stage_name="hpo",
+                search_space_override=search_space,
+            )
             nas_result = _run_nas_stage(base_model_params={})
 
         if run_nas_for_candidate:
@@ -508,6 +515,8 @@ def evaluate_candidate(
         train_kwargs: dict[str, Any] = {}
         if selected_params:
             train_kwargs["model_params"] = selected_params
+        train_kwargs["validation_data"] = str(outer_calibration_csv)
+        train_kwargs["validation_split"] = 0.0
 
         stage_update("train", state="start")
         train_started = monotonic()

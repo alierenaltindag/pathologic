@@ -227,6 +227,7 @@ def build_hybrid_strategy_tuning_search_space(
 def build_candidate_specs(
     *,
     include_models: list[str] | None,
+    explicit_candidates: list[str] | None = None,
     exclude_models: list[str] | None,
     include_hybrids: bool,
     max_candidates: int | None,
@@ -243,12 +244,36 @@ def build_candidate_specs(
     normalized_regularization_models = parse_regularization_models(regularization_models)
 
     available = sorted(list_registered_models())
+    explicit_entries: list[tuple[str, ...]] = []
+    if explicit_candidates:
+        for raw_item in explicit_candidates:
+            token = str(raw_item).strip().lower()
+            if not token:
+                continue
+            members = tuple(_normalize_alias(part) for part in token.split("+") if part.strip())
+            if not members:
+                continue
+            if len(set(members)) != len(members):
+                raise ValueError(f"Explicit candidate has duplicate members: {raw_item}")
+            unknown = [member for member in members if member not in available]
+            if unknown:
+                unknown_text = ", ".join(sorted(unknown))
+                raise ValueError(
+                    f"Unknown model alias in explicit candidate '{raw_item}': {unknown_text}"
+                )
+
+            explicit_entries.append(members)
+
+        if not explicit_entries:
+            raise ValueError("No valid explicit candidates parsed from --only-candidates.")
+
     include_set = set(include_models) if include_models else set(available)
     exclude_set = set(exclude_models or [])
     singles = [alias for alias in available if alias in include_set and alias not in exclude_set]
 
     candidates: list[CandidateSpec] = []
-    for alias in singles:
+
+    def _single_search_space(alias: str) -> dict[str, dict[str, Any]]:
         single_space = model_tuning_search_space(alias)
         if profile_name == "off":
             single_space = strip_regularization_search_space(
@@ -266,13 +291,81 @@ def build_candidate_specs(
                 _normalize_alias(item) for item in normalized_regularization_models
             }:
                 single_space.update(_regularization_space_for_alias(alias))
+        return single_space
 
+    def _hybrid_search_space(members: tuple[str, ...]) -> dict[str, dict[str, Any]]:
+        hybrid_space = build_hybrid_tuning_search_space(members)
+        if profile_name == "off":
+            hybrid_space = strip_regularization_search_space(
+                search_space=hybrid_space,
+                members=members,
+                regularization_models=None,
+            )
+        elif normalized_regularization_models is not None:
+            hybrid_space = strip_regularization_search_space(
+                search_space=hybrid_space,
+                members=members,
+                regularization_models=None,
+            )
+            hybrid_space.update(
+                build_member_regularization_tuning_search_space(
+                    members=members,
+                    regularization_models=normalized_regularization_models,
+                )
+            )
+
+        if hybrid_tune_strategy_and_params:
+            profile_space = {
+                str(key): dict(value)
+                for key, value in dict(hybrid_tuning_search_space or {}).items()
+                if isinstance(value, dict)
+            }
+            if not profile_space:
+                profile_space = build_hybrid_strategy_tuning_search_space()
+            hybrid_space.update(profile_space)
+
+        return hybrid_space
+
+    if explicit_entries:
+        seen_names: set[str] = set()
+        for members in explicit_entries:
+            candidate_name = "+".join(members)
+            if candidate_name in seen_names:
+                continue
+            seen_names.add(candidate_name)
+
+            if len(members) == 1:
+                alias = members[0]
+                candidates.append(
+                    CandidateSpec(
+                        name=alias,
+                        kind="single",
+                        members=(alias,),
+                        tuning_search_space=_single_search_space(alias),
+                    )
+                )
+                continue
+
+            candidates.append(
+                CandidateSpec(
+                    name=candidate_name,
+                    kind="hybrid_pair",
+                    members=members,
+                    tuning_search_space=_hybrid_search_space(members),
+                )
+            )
+
+        if max_candidates is not None and max_candidates > 0:
+            candidates = candidates[:max_candidates]
+        return candidates
+
+    for alias in singles:
         candidates.append(
             CandidateSpec(
                 name=alias,
                 kind="single",
                 members=(alias,),
-                tuning_search_space=single_space,
+                tuning_search_space=_single_search_space(alias),
             )
         )
 
@@ -285,36 +378,7 @@ def build_candidate_specs(
         for combination_size in range(2, upper_size + 1):
             for members in combinations(singles, combination_size):
                 pair_name = "+".join(members)
-                pair_search_space = build_hybrid_tuning_search_space(tuple(members))
-
-                if profile_name == "off":
-                    pair_search_space = strip_regularization_search_space(
-                        search_space=pair_search_space,
-                        members=tuple(members),
-                        regularization_models=None,
-                    )
-                elif normalized_regularization_models is not None:
-                    pair_search_space = strip_regularization_search_space(
-                        search_space=pair_search_space,
-                        members=tuple(members),
-                        regularization_models=None,
-                    )
-                    pair_search_space.update(
-                        build_member_regularization_tuning_search_space(
-                            members=tuple(members),
-                            regularization_models=normalized_regularization_models,
-                        )
-                    )
-
-                if hybrid_tune_strategy_and_params:
-                    profile_space = {
-                        str(key): dict(value)
-                        for key, value in dict(hybrid_tuning_search_space or {}).items()
-                        if isinstance(value, dict)
-                    }
-                    if not profile_space:
-                        profile_space = build_hybrid_strategy_tuning_search_space()
-                    pair_search_space.update(profile_space)
+                pair_search_space = _hybrid_search_space(tuple(members))
                 candidates.append(
                     CandidateSpec(
                         name=pair_name,

@@ -160,3 +160,72 @@ def test_mlp_architecture_max_epochs_overrides_model_and_train(
     assert model._trained_model is not None
     assert model._trained_model._max_epochs == 3
 
+
+@pytest.mark.integration
+def test_train_runtime_early_stopping_false_overrides_model_config(
+    monkeypatch: pytest.MonkeyPatch,
+    variant_csv_path: str,
+) -> None:
+    custom_defaults = {
+        "seed": 42,
+        "device": "cpu",
+        "data": {
+            "label_column": "label",
+            "gene_column": "gene_id",
+            "required_features": ["revel_score", "cadd_phred"],
+        },
+        "split": {
+            "mode": "cross_validation",
+            "cross_validation": {"n_splits": 3, "stratified": True},
+        },
+        "preprocess": {
+            "missing_value_policy": "impute",
+            "impute_strategy": "median",
+            "scaler": "standard",
+            "per_gene": True,
+        },
+        "train": {
+            "epochs": 5,
+            "batch_size": 16,
+            "validation_split": 0.2,
+            "mixed_precision": False,
+            "split": {
+                "mode": "cross_validation",
+                "cross_validation": {"n_splits": 3, "stratified": True},
+            },
+            "preprocess": {
+                "missing_value_policy": "impute",
+                "impute_strategy": "median",
+                "scaler": "standard",
+                "per_gene": True,
+            },
+            "early_stopping": {
+                "enabled": False,
+                "patience": 2,
+                "validation_split": 0.2,
+            },
+            "class_imbalance": {"enabled": False},
+        },
+        "models": {
+            "xgboost": {
+                "n_estimators": 20,
+                "max_depth": 3,
+                "learning_rate": 0.1,
+                "early_stopping": {
+                    "enabled": True,
+                    "patience": 25,
+                    "validation_split": 0.4,
+                },
+            }
+        },
+    }
+
+    monkeypatch.setattr(PathoLogic, "_load_defaults", staticmethod(lambda: custom_defaults))
+
+    model = PathoLogic("xgboost")
+    model.train(variant_csv_path)
+
+    assert model._trained_model is not None
+    assert model._trained_model._early_stopping_cfg["enabled"] is False
+    assert model._trained_model._early_stopping_cfg["patience"] == 2
+

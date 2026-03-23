@@ -57,7 +57,13 @@ class Trainer:
         y_val: np.ndarray | None = None,
     ) -> TrainerResult:
         """Fit model and optionally evaluate validation predictions."""
-        model.fit(x_train, y_train)
+        if x_val is not None and y_val is not None:
+            try:
+                model.fit(x_train, y_train, x_val=x_val, y_val=y_val)
+            except TypeError:
+                model.fit(x_train, y_train)
+        else:
+            model.fit(x_train, y_train)
         metrics: dict[str, float] = {}
         if x_val is not None and y_val is not None:
             y_pred = np.asarray(model.predict(x_val)).reshape(-1)

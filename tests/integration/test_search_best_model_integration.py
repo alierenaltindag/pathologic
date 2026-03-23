@@ -216,12 +216,30 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
     assert train_report.get("objective") == "f1"
     assert isinstance(train_report.get("candidates"), list)
     assert train_report["candidates"], "Expected candidate quick summary rows"
+    assert isinstance(train_report.get("overfitting_policy"), dict)
+    split_manifest_warnings = train_report.get("split_manifest_warnings")
+    assert isinstance(split_manifest_warnings, dict)
+    assert split_manifest_warnings.get("status") == "ok"
+    assert split_manifest_warnings.get("warning_count") == 0
 
     winner_info = train_report.get("winner")
     assert isinstance(winner_info, dict)
     assert winner_info.get("candidate") == winner_candidate
     assert isinstance(winner_info.get("selected_params"), dict)
     assert isinstance(winner_info.get("test_metrics"), dict)
+    assert "overfitting_risk_level" in winner_info
+    assert "generalization_gap" in winner_info
+
+    candidate_summary = train_report["candidates"][0]
+    assert "cv_objective_score" in candidate_summary
+    assert "test_objective_score" in candidate_summary
+    assert "generalization_gap" in candidate_summary
+    assert "generalization_gap_ratio" in candidate_summary
+    assert "overfitting_risk_level" in candidate_summary
+    assert "overfitting_suspected" in candidate_summary
+
+    train_report_html = train_report_html_path.read_text(encoding="utf-8")
+    assert "Split Manifest Warnings" in train_report_html
 
 
 def test_search_best_model_hybrid_runs_nas_only_for_neural_member(tmp_path: Path) -> None:

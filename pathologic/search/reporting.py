@@ -12,6 +12,13 @@ from pathologic.explain.visualizer import ExplainabilityVisualizer
 from pathologic.search import artifacts as _search_artifacts
 
 
+_LEAKAGE_FIELDS: tuple[str, str, str] = (
+    "train_val_shared_genes",
+    "train_test_shared_genes",
+    "val_test_shared_genes",
+)
+
+
 def _safe_metric(value: Any) -> float:
     try:
         parsed = float(value)
@@ -20,6 +27,62 @@ def _safe_metric(value: Any) -> float:
     if math.isnan(parsed):
         return float("-inf")
     return parsed
+
+
+def _extract_cv_objective_score(row: dict[str, Any]) -> float:
+    hpo_payload = row.get("hpo") if isinstance(row.get("hpo"), dict) else {}
+    if isinstance(hpo_payload, dict):
+        score = _safe_metric(hpo_payload.get("best_score"))
+        if score != float("-inf"):
+            return float(score)
+
+    for key in ("hpo_level2", "hpo_level1"):
+        payload = row.get(key)
+        if not isinstance(payload, dict):
+            continue
+        score = _safe_metric(payload.get("best_score"))
+        if score != float("-inf"):
+            return float(score)
+
+    return float("-inf")
+
+
+def _overfitting_summary(
+    *,
+    cv_score: float,
+    test_score: float,
+) -> dict[str, Any]:
+    if cv_score == float("-inf") or test_score == float("-inf"):
+        return {
+            "cv_objective_score": None,
+            "test_objective_score": None,
+            "generalization_gap": None,
+            "generalization_gap_ratio": None,
+            "overfitting_risk_level": "unknown",
+            "overfitting_suspected": False,
+        }
+
+    gap = float(cv_score - test_score)
+    denom = max(abs(float(cv_score)), 1e-8)
+    gap_ratio = float(gap / denom)
+
+    if gap >= 0.08 or gap_ratio >= 0.12:
+        risk_level = "high"
+    elif gap >= 0.03 or gap_ratio >= 0.05:
+        risk_level = "moderate"
+    elif gap <= -0.05:
+        risk_level = "underfit_or_shift"
+    else:
+        risk_level = "low"
+
+    return {
+        "cv_objective_score": float(cv_score),
+        "test_objective_score": float(test_score),
+        "generalization_gap": gap,
+        "generalization_gap_ratio": gap_ratio,
+        "overfitting_risk_level": risk_level,
+        "overfitting_suspected": risk_level in {"moderate", "high"},
+    }
 
 
 def compute_calibration_rankings(
@@ -115,6 +178,116 @@ def select_calibration_aware_winner(
     return objective_best, calibration_aware_best
 
 
+def _build_split_manifest_warnings(
+    *,
+    split_summary: dict[str, Any],
+    outer_train_rows: int,
+    outer_calibration_rows: int,
+    outer_test_rows: int,
+) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+
+    for field in _LEAKAGE_FIELDS:
+        raw_value = split_summary.get(field)
+        if raw_value is None:
+            items.append(
+                {
+                    "code": "SPLIT_LEAKAGE_FIELD_MISSING",
+                    "severity": "warning",
+                    "field": field,
+                    "actual": None,
+                    "expected": 0,
+                    "message": f"Missing leakage field '{field}' in outer_split_summary.",
+                    "source": "split_manifest.outer_split_summary",
+                }
+            )
+            continue
+
+        try:
+            parsed_value = int(raw_value)
+        except (TypeError, ValueError):
+            items.append(
+                {
+                    "code": "SPLIT_LEAKAGE_FIELD_INVALID_TYPE",
+                    "severity": "warning",
+                    "field": field,
+                    "actual": raw_value,
+                    "expected": "integer >= 0",
+                    "message": f"Leakage field '{field}' is not an integer value.",
+                    "source": "split_manifest.outer_split_summary",
+                }
+            )
+            continue
+
+        if parsed_value < 0:
+            items.append(
+                {
+                    "code": "SPLIT_LEAKAGE_FIELD_NEGATIVE",
+                    "severity": "warning",
+                    "field": field,
+                    "actual": parsed_value,
+                    "expected": "integer >= 0",
+                    "message": f"Leakage field '{field}' is negative.",
+                    "source": "split_manifest.outer_split_summary",
+                }
+            )
+            continue
+
+        if parsed_value != 0:
+            items.append(
+                {
+                    "code": "SPLIT_LEAKAGE_NONZERO",
+                    "severity": "error",
+                    "field": field,
+                    "actual": parsed_value,
+                    "expected": 0,
+                    "message": f"Leakage detected: '{field}' must be zero.",
+                    "source": "split_manifest.outer_split_summary",
+                }
+            )
+
+    expected_total_rows = int(outer_train_rows) + int(outer_calibration_rows) + int(outer_test_rows)
+    split_row_fields = ("train_size", "val_size", "test_size")
+    if all(field in split_summary for field in split_row_fields):
+        try:
+            summary_total_rows = sum(int(split_summary[field]) for field in split_row_fields)
+        except (TypeError, ValueError):
+            items.append(
+                {
+                    "code": "SPLIT_ROWCOUNT_INVALID_TYPE",
+                    "severity": "warning",
+                    "field": "train_size/val_size/test_size",
+                    "actual": [split_summary.get(field) for field in split_row_fields],
+                    "expected": "integer triplet",
+                    "message": "Split row counts are not all valid integers.",
+                    "source": "split_manifest.outer_split_summary",
+                }
+            )
+        else:
+            if summary_total_rows != expected_total_rows:
+                items.append(
+                    {
+                        "code": "SPLIT_ROWCOUNT_MISMATCH",
+                        "severity": "warning",
+                        "field": "train_size+val_size+test_size",
+                        "actual": summary_total_rows,
+                        "expected": expected_total_rows,
+                        "message": "Split row counts do not match outer split partition totals.",
+                        "source": "split_manifest",
+                    }
+                )
+
+    has_errors = any(str(item.get("severity")) == "error" for item in items)
+    status = "error" if has_errors else ("warning" if items else "ok")
+    return {
+        "status": status,
+        "warning_count": len(items),
+        "has_errors": has_errors,
+        "checked_fields": list(_LEAKAGE_FIELDS),
+        "items": items,
+    }
+
+
 def _build_train_report_payload(
     *,
     objective: str,
@@ -122,6 +295,7 @@ def _build_train_report_payload(
     best: dict[str, Any],
     objective_best: dict[str, Any],
     elapsed_seconds: float,
+    split_manifest_warnings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     candidate_rows: list[dict[str, Any]] = []
     for row in leaderboard:
@@ -204,6 +378,13 @@ def _build_train_report_payload(
             else {}
         )
 
+        cv_objective_score = _extract_cv_objective_score(row)
+        test_objective_score = _safe_metric(metrics.get(objective))
+        overfitting = _overfitting_summary(
+            cv_score=cv_objective_score,
+            test_score=test_objective_score,
+        )
+
         candidate_rows.append(
             {
                 "candidate": candidate_name,
@@ -242,6 +423,7 @@ def _build_train_report_payload(
                     "process_rss_peak_delta_mb"
                 ),
                 "compute_cost_report_html": compute_cost_artifacts.get("compute_cost_report_html"),
+                **overfitting,
             }
         )
 
@@ -263,6 +445,29 @@ def _build_train_report_payload(
     return {
         "objective": objective,
         "elapsed_seconds": float(elapsed_seconds),
+        "split_manifest_warnings": split_manifest_warnings
+        if isinstance(split_manifest_warnings, dict)
+        else {
+            "status": "ok",
+            "warning_count": 0,
+            "has_errors": False,
+            "checked_fields": list(_LEAKAGE_FIELDS),
+            "items": [],
+        },
+        "overfitting_policy": {
+            "gap_thresholds": {
+                "moderate": 0.03,
+                "high": 0.08,
+            },
+            "gap_ratio_thresholds": {
+                "moderate": 0.05,
+                "high": 0.12,
+            },
+            "note": (
+                "Heuristic generalization risk derived from CV objective vs test objective. "
+                "Use with calibration and error-analysis artifacts for final diagnosis."
+            ),
+        },
         "winner": {
             "candidate": winner_candidate,
             "selection_mode": "calibration_aware",
@@ -280,6 +485,56 @@ def _build_train_report_payload(
             "nas": winner_row.get("nas"),
             "calibration": winner_row.get("calibration"),
             "panel_thresholds": winner_row.get("panel_thresholds"),
+            "cv_objective_score": next(
+                (
+                    row.get("cv_objective_score")
+                    for row in candidate_rows
+                    if str(row.get("candidate", "")) == winner_candidate
+                ),
+                None,
+            ),
+            "test_objective_score": next(
+                (
+                    row.get("test_objective_score")
+                    for row in candidate_rows
+                    if str(row.get("candidate", "")) == winner_candidate
+                ),
+                None,
+            ),
+            "generalization_gap": next(
+                (
+                    row.get("generalization_gap")
+                    for row in candidate_rows
+                    if str(row.get("candidate", "")) == winner_candidate
+                ),
+                None,
+            ),
+            "generalization_gap_ratio": next(
+                (
+                    row.get("generalization_gap_ratio")
+                    for row in candidate_rows
+                    if str(row.get("candidate", "")) == winner_candidate
+                ),
+                None,
+            ),
+            "overfitting_risk_level": next(
+                (
+                    row.get("overfitting_risk_level")
+                    for row in candidate_rows
+                    if str(row.get("candidate", "")) == winner_candidate
+                ),
+                "unknown",
+            ),
+            "overfitting_suspected": bool(
+                next(
+                    (
+                        row.get("overfitting_suspected")
+                        for row in candidate_rows
+                        if str(row.get("candidate", "")) == winner_candidate
+                    ),
+                    False,
+                )
+            ),
         },
         "candidates": candidate_rows,
     }
@@ -289,6 +544,16 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
     winner = report.get("winner") if isinstance(report.get("winner"), dict) else {}
     candidates = report.get("candidates") if isinstance(report.get("candidates"), list) else []
     objective = str(report.get("objective", "f1"))
+    split_manifest_warnings = (
+        report.get("split_manifest_warnings")
+        if isinstance(report.get("split_manifest_warnings"), dict)
+        else {}
+    )
+    warning_items = (
+        split_manifest_warnings.get("items")
+        if isinstance(split_manifest_warnings.get("items"), list)
+        else []
+    )
 
     table_rows: list[str] = []
     for item in candidates:
@@ -306,6 +571,11 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
             "<tr>"
             f"<td>{escape(str(item.get('candidate', 'unknown')))}</td>"
             f"<td>{escape(str(item.get('status', 'unknown')))}</td>"
+            f"<td>{_fmt(item.get('cv_objective_score'))}</td>"
+            f"<td>{_fmt(item.get('test_objective_score'))}</td>"
+            f"<td>{_fmt(item.get('generalization_gap'))}</td>"
+            f"<td>{_fmt(item.get('generalization_gap_ratio'))}</td>"
+            f"<td>{_fmt(item.get('overfitting_risk_level'))}</td>"
             f"<td>{_fmt(item.get('f1'))}</td>"
             f"<td>{_fmt(item.get('roc_auc'))}</td>"
             f"<td>{_fmt(item.get('auprc'))}</td>"
@@ -327,7 +597,24 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
         )
 
     if not table_rows:
-        table_rows.append("<tr><td colspan='19'>No candidate rows available.</td></tr>")
+        table_rows.append("<tr><td colspan='24'>No candidate rows available.</td></tr>")
+
+    warning_rows: list[str] = []
+    for item in warning_items:
+        if not isinstance(item, dict):
+            continue
+        warning_rows.append(
+            "<tr>"
+            f"<td>{escape(str(item.get('severity', 'warning')))}</td>"
+            f"<td>{escape(str(item.get('code', 'unknown')))}</td>"
+            f"<td>{escape(str(item.get('field', '-')))}</td>"
+            f"<td>{escape(str(item.get('actual', '-')))}</td>"
+            f"<td>{escape(str(item.get('expected', '-')))}</td>"
+            f"<td>{escape(str(item.get('message', '-')))}</td>"
+            "</tr>"
+        )
+    if not warning_rows:
+        warning_rows.append("<tr><td colspan='6'>No split manifest warnings.</td></tr>")
 
     winner_json = escape(json.dumps(winner, ensure_ascii=True, indent=2))
     html = (
@@ -346,9 +633,15 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
         f"<div><strong>Objective:</strong> {escape(objective)}</div>"
         f"<div><strong>Winner:</strong> {escape(str(winner.get('candidate', 'unknown')))}</div>"
         f"<div><strong>Selection mode:</strong> {escape(str(winner.get('selection_mode', 'calibration_aware')))}</div>"
+        f"<div><strong>Split manifest warning status:</strong> {escape(str(split_manifest_warnings.get('status', 'ok')))}</div>"
+        f"<div><strong>Split manifest warning count:</strong> {escape(str(split_manifest_warnings.get('warning_count', 0)))}</div>"
         "</div>"
+        "<div class='card'><h2>Split Manifest Warnings</h2>"
+        "<table><thead><tr><th>Severity</th><th>Code</th><th>Field</th><th>Actual</th><th>Expected</th><th>Message</th></tr></thead><tbody>"
+        + "".join(warning_rows)
+        + "</tbody></table></div>"
         "<div class='card'><h2>Candidate Quick Summary</h2>"
-        "<table><thead><tr><th>Candidate</th><th>Status</th><th>F1</th><th>ROC-AUC</th><th>AUPRC</th><th>MCC</th><th>Precision</th><th>Recall</th><th>ECE(raw)</th><th>Brier(raw)</th><th>Objective</th><th>Runtime(s)</th><th>Train(s)</th><th>SingleInf(ms)</th><th>BatchInf(ms)</th><th>PeakVRAM(MB)</th><th>TrainMemDelta(MB)</th><th>TrainMemPeakDelta(MB)</th><th>ComputeCostReport</th></tr></thead><tbody>"
+        "<table><thead><tr><th>Candidate</th><th>Status</th><th>CV Objective</th><th>Test Objective</th><th>Gap(CV-Test)</th><th>Gap Ratio</th><th>Overfit Risk</th><th>F1</th><th>ROC-AUC</th><th>AUPRC</th><th>MCC</th><th>Precision</th><th>Recall</th><th>ECE(raw)</th><th>Brier(raw)</th><th>Objective</th><th>Runtime(s)</th><th>Train(s)</th><th>SingleInf(ms)</th><th>BatchInf(ms)</th><th>PeakVRAM(MB)</th><th>TrainMemDelta(MB)</th><th>TrainMemPeakDelta(MB)</th><th>ComputeCostReport</th></tr></thead><tbody>"
         + "".join(table_rows)
         + "</tbody></table></div>"
         "<div class='card'><h2>Winner Detailed Configuration</h2>"
@@ -391,6 +684,12 @@ def write_run_reports(
         "outer_calibration_rows": int(outer_calibration_rows),
         "outer_test_rows": int(outer_test_rows),
     }
+    split_manifest_warnings = _build_split_manifest_warnings(
+        split_summary=split_summary,
+        outer_train_rows=int(outer_train_rows),
+        outer_calibration_rows=int(outer_calibration_rows),
+        outer_test_rows=int(outer_test_rows),
+    )
     leaderboard_payload = {
         "objective": objective,
         "budget_profile": budget_profile,
@@ -481,6 +780,7 @@ def write_run_reports(
         best=best,
         objective_best=objective_best,
         elapsed_seconds=elapsed_seconds,
+        split_manifest_warnings=split_manifest_warnings,
     )
     train_report_path.write_text(
         json.dumps(train_report, ensure_ascii=True, indent=2),

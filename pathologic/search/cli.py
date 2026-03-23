@@ -88,6 +88,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--only-candidates",
+        default=None,
+        help=(
+            "Comma-separated explicit candidates to evaluate without generating extra "
+            "single/hybrid combinations. Use '+' for hybrids, for example: "
+            "'xgboost+lightgbm+catboost,tabnet'."
+        ),
+    )
+    parser.add_argument(
         "--tune-engine",
         default="optuna",
         choices=["optuna", "random", "grid"],

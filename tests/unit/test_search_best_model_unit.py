@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import logging
 import os
 import warnings
 from pathlib import Path
@@ -8,6 +10,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from pathologic.search.data import resolve_search_defaults_from_defaults
+from pathologic.search.orchestration import run_candidate_search_loop
+from pathologic.search.spec import BudgetProfile, CandidateSpec
 
 from scripts.search_best_model import (
     _build_error_analysis_run_summary,
@@ -56,6 +60,35 @@ def test_build_candidate_specs_supports_triple_hybrid_combinations() -> None:
     hybrid_names = [item.name for item in candidates if item.kind == "hybrid_pair"]
 
     assert "logreg+random_forest+xgboost" in hybrid_names
+
+
+def test_build_candidate_specs_only_candidates_keeps_only_requested_hybrid() -> None:
+    candidates = _build_candidate_specs(
+        include_models=["xgboost", "lightgbm", "catboost", "hist_gbdt"],
+        explicit_candidates=["xgboost+lightgbm+catboost"],
+        exclude_models=None,
+        include_hybrids=True,
+        max_candidates=None,
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.kind == "hybrid_pair"
+    assert candidate.name == "xgboost+lightgbm+catboost"
+    assert candidate.members == ("xgboost", "lightgbm", "catboost")
+
+
+def test_build_candidate_specs_only_candidates_supports_mixed_single_and_hybrid() -> None:
+    candidates = _build_candidate_specs(
+        include_models=["xgboost", "lightgbm", "catboost", "hist_gbdt"],
+        explicit_candidates=["hist_gbdt", "xgboost+lightgbm+catboost"],
+        exclude_models=None,
+        include_hybrids=True,
+        max_candidates=None,
+    )
+
+    assert [item.name for item in candidates] == ["hist_gbdt", "xgboost+lightgbm+catboost"]
+    assert [item.kind for item in candidates] == ["single", "hybrid_pair"]
 
 
 def test_build_pair_tuning_search_space_uses_member_namespace_prefix() -> None:
@@ -285,6 +318,19 @@ def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     assert args.max_hybrid_combination_size == expected_max_hybrid_size
 
 
+def test_arg_parser_accepts_only_candidates_override() -> None:
+    parser = build_arg_parser()
+    args = parser.parse_args(
+        [
+            "data.csv",
+            "--only-candidates",
+            "xgboost+lightgbm+catboost,hist_gbdt",
+        ]
+    )
+
+    assert args.only_candidates == "xgboost+lightgbm+catboost,hist_gbdt"
+
+
 def test_arg_parser_accepts_panel_threshold_overrides() -> None:
     parser = build_arg_parser()
     args = parser.parse_args(
@@ -499,4 +545,62 @@ def test_build_error_analysis_run_summary_collects_candidate_rows() -> None:
     assert len(payload["rows"]) == 2
     assert payload["rows"][0]["is_winner"] is True
     assert payload["rows"][0]["error_count"] == 10
+
+
+def test_run_candidate_search_loop_forwards_outer_calibration_csv(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_evaluate_candidate(**kwargs: Any) -> tuple[dict[str, Any], Any]:
+        captured["outer_calibration_csv"] = kwargs.get("outer_calibration_csv")
+        return (
+            {
+                "candidate": "logreg",
+                "kind": "single",
+                "status": "ok",
+                "runtime_seconds": 0.1,
+            },
+            None,
+        )
+
+    monkeypatch.setattr(
+        "pathologic.search.orchestration._search_evaluation.evaluate_candidate",
+        _fake_evaluate_candidate,
+    )
+
+    candidate = CandidateSpec(
+        name="logreg",
+        kind="single",
+        members=("logreg",),
+        tuning_search_space={},
+    )
+    args = argparse.Namespace(seed=42)
+    budget = BudgetProfile(n_trials=1, timeout_minutes=1.0, nas_candidates=1, cv_splits=2)
+
+    outer_train_csv = tmp_path / "outer_train.csv"
+    outer_calibration_csv = tmp_path / "outer_calibration.csv"
+    outer_test_csv = tmp_path / "outer_test.csv"
+    for path in (outer_train_csv, outer_calibration_csv, outer_test_csv):
+        path.write_text("label,feature__x\n1,0.1\n", encoding="utf-8")
+
+    run_candidate_search_loop(
+        args=args,
+        candidates=[candidate],
+        budget=budget,
+        quiet_inner_search=True,
+        outer_train_csv=outer_train_csv,
+        outer_calibration_csv=outer_calibration_csv,
+        outer_test_csv=outer_test_csv,
+        outer_test_df=pd.DataFrame({"label": [1], "feature__x": [0.1]}),
+        outer_calibration_df=pd.DataFrame({"label": [1], "feature__x": [0.1]}),
+        run_dir=tmp_path,
+        feature_columns=["feature__x"],
+        cv_splits=2,
+        x_train_nas=np.array([[0.1]]),
+        y_train_nas=np.array([1]),
+        x_val_nas=np.array([[0.2]]),
+        y_val_nas=np.array([1]),
+        run_logger=logging.getLogger("test.search.orchestration"),
+    )
+
+    assert captured["outer_calibration_csv"] == outer_calibration_csv
 

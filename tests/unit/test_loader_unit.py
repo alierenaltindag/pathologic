@@ -103,3 +103,36 @@ def test_build_holdout_split_rejects_invalid_ratios(variant_frame: pd.DataFrame)
             random_state=42,
         )
 
+
+def test_build_folds_warns_when_gene_column_missing(variant_frame: pd.DataFrame) -> None:
+    gene_missing = variant_frame.drop(columns=["gene_id"])
+
+    with pytest.warns(UserWarning, match="falling back to non-grouped folds"):
+        folds = build_folds(
+            gene_missing,
+            label_column="label",
+            gene_column="gene_id",
+            n_splits=3,
+            stratified=True,
+            random_state=42,
+        )
+
+    assert len(folds) == 3
+
+
+def test_build_holdout_warns_when_gene_column_missing(variant_frame: pd.DataFrame) -> None:
+    gene_missing = variant_frame.drop(columns=["gene_id"])
+
+    with pytest.warns(UserWarning, match="falling back to non-grouped holdout split"):
+        split_indices = build_holdout_split(
+            gene_missing,
+            label_column="label",
+            gene_column="gene_id",
+            test_size=0.2,
+            val_size=0.2,
+            stratified=True,
+            random_state=42,
+        )
+
+    assert set(split_indices) == {"train", "val", "test"}
+

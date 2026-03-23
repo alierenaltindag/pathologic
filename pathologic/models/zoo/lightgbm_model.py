@@ -223,6 +223,24 @@ class LightGBMWrapper:
         validation_split = float(self._early_stopping_cfg.get("validation_split", 0.2))
         patience = int(self._early_stopping_cfg.get("patience", 10))
 
+        x_val_external = kwargs.pop("x_val", None)
+        y_val_external = kwargs.pop("y_val", None)
+        if x_val_external is not None and y_val_external is not None and len(x_val_external) > 0:
+            fit_kwargs: dict[str, Any] = {**kwargs, "eval_set": [(x_val_external, y_val_external)]}
+            if patience > 0:
+                fit_kwargs["early_stopping_rounds"] = patience
+            try:
+                self._fit_with_gpu_fallback(X, y, **fit_kwargs)
+            except TypeError:
+                fit_kwargs.pop("early_stopping_rounds", None)
+                try:
+                    self._fit_with_gpu_fallback(X, y, **fit_kwargs)
+                except Exception:
+                    self._fit_with_gpu_fallback(X, y, **kwargs)
+            except Exception:
+                self._fit_with_gpu_fallback(X, y, **kwargs)
+            return self
+
         if not (0.0 < validation_split < 1.0) or len(X) <= 4:
             self._fit_with_gpu_fallback(X, y, **kwargs)
             return self

@@ -20,7 +20,7 @@ timeout_minutes: 60
 
 # Tuning erken durdurma kontrolu.
 early_stopping:
-  enabled: false
+  enabled: true
   patience: 5
   min_improvement: 0.0
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Unpack, cast
 
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from pathologic.api_overrides import (
@@ -154,7 +155,12 @@ class PathoLogic:
             "gpu_ids",
             "ddp",
         }
-        extra_override_keys = {"learning_rate", "weight_decay", "model_params"}
+        extra_override_keys = {
+            "learning_rate",
+            "weight_decay",
+            "model_params",
+            "validation_data",
+        }
         allowed_override_keys = data_override_keys | train_override_keys | extra_override_keys
         self._validate_override_keys(
             overrides=overrides,
@@ -168,6 +174,12 @@ class PathoLogic:
         train_overrides = {
             key: value for key, value in overrides.items() if key in train_override_keys
         }
+        validation_data_override = overrides.get("validation_data")
+        validation_data_path: str | None = None
+        if validation_data_override is not None:
+            if not isinstance(validation_data_override, str) or not validation_data_override.strip():
+                raise ValueError("validation_data override must be a non-empty string path.")
+            validation_data_path = validation_data_override.strip()
 
         data_config = merge_config_overrides(
             base_config=data_config,
@@ -229,6 +241,16 @@ class PathoLogic:
             require_gene_column=bool(preprocess_config.get("per_gene", False)),
             required_feature_columns=active_features,
         )
+        validation_dataset: pd.DataFrame | None = None
+        if validation_data_path is not None:
+            validation_dataset = load_dataset(validation_data_path)
+            validate_schema(
+                validation_dataset,
+                label_column=label_column,
+                gene_column=gene_column,
+                require_gene_column=bool(preprocess_config.get("per_gene", False)),
+                required_feature_columns=active_features,
+            )
 
         split_mode = str(split_config.get("mode", "cross_validation")).strip().lower()
         if split_mode in {"cv", "cross_validation"}:
@@ -386,7 +408,11 @@ class PathoLogic:
         y_train = y
         x_val: np.ndarray | None = None
         y_val: np.ndarray | None = None
-        if 0.0 < val_fraction < 1.0 and len(x) > 4:
+        if validation_dataset is not None:
+            processed_validation = processor.transform(validation_dataset)
+            x_val = processed_validation[training_feature_columns].to_numpy(dtype=float)
+            y_val = processed_validation[label_column].to_numpy(dtype=int)
+        elif 0.0 < val_fraction < 1.0 and len(x) > 4:
             stratify_target: np.ndarray | None = None
             if np.unique(y).size > 1:
                 stratify_target = y
@@ -729,7 +755,10 @@ class PathoLogic:
                         random_state=int(self.defaults.get("seed", 42)),
                         model_params=model_params,
                     )
-                    model.fit(x_train, y_train)
+                    try:
+                        model.fit(x_train, y_train, x_val=x_val, y_val=y_val)
+                    except TypeError:
+                        model.fit(x_train, y_train)
 
                     y_pred = np.asarray(model.predict(x_val)).reshape(-1)
                     y_score: np.ndarray | None = None
@@ -1514,20 +1543,19 @@ class PathoLogic:
         if not isinstance(early_stopping_config, dict):
             return
 
-        if not bool(early_stopping_config.get("enabled", False)):
-            return
+        supported_models = {"xgboost", "lightgbm", "catboost", "tabnet", "mlp"}
+        resolved_early_stopping = dict(early_stopping_config)
 
         if "+" in self.model_name:
             for alias in parse_hybrid_alias(self.model_name):
-                if alias in {"xgboost", "catboost", "tabnet", "mlp"}:
-                    model_params.setdefault(
-                        f"member__{alias}__early_stopping",
-                        dict(early_stopping_config),
+                if alias in supported_models:
+                    model_params[f"member__{alias}__early_stopping"] = dict(
+                        resolved_early_stopping
                     )
             return
 
-        if self.model_name in {"xgboost", "catboost", "tabnet", "mlp"}:
-            model_params.setdefault("early_stopping", dict(early_stopping_config))
+        if self.model_name in supported_models:
+            model_params["early_stopping"] = dict(resolved_early_stopping)
 
     def _apply_class_imbalance_model_params(
         self,

@@ -154,7 +154,14 @@ class TabNetWrapper:
             return y.reshape(-1)
         return np.asarray(y).reshape(-1)
 
-    def fit(self, x: np.ndarray, y: np.ndarray) -> TabNetWrapper:
+    def fit(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        *,
+        x_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+    ) -> TabNetWrapper:
         x_np = self._to_numpy_features(x)
         y_np = self._to_numpy_labels(y)
 
@@ -169,6 +176,13 @@ class TabNetWrapper:
                 "batch_size": self._batch_size,
                 "virtual_batch_size": self._virtual_batch_size,
             }
+            if early_enabled and x_val is not None and y_val is not None and len(x_val) > 0:
+                x_val_np = self._to_numpy_features(x_val)
+                y_val_np = self._to_numpy_labels(y_val)
+                fit_kwargs["eval_set"] = [(x_val_np, y_val_np)]
+                self.estimator.fit(x_np, y_np, **fit_kwargs)
+                return self
+
             if early_enabled and 0.0 < validation_split < 1.0 and len(x_np) > 4:
                 stratify_target: np.ndarray | None = None
                 if np.unique(y_np).size > 1:

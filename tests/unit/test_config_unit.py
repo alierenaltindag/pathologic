@@ -94,3 +94,44 @@ def test_defaults_data_schema_matches_engineered_feature_contract() -> None:
     assert "Gene(s)" in error_columns
     assert "Protein change" in error_columns
     assert "Veri_Kaynagi_Paneli" in error_columns
+
+
+def test_runtime_defaults_enable_early_stopping_for_train_and_tune() -> None:
+    model = PathoLogic("xgboost")
+
+    assert model.defaults["train"]["early_stopping"]["enabled"] is True
+    assert model.defaults["tune"]["early_stopping"]["enabled"] is True
+
+
+def test_model_configs_start_with_mild_regularization_defaults() -> None:
+    xgb = PathoLogic("xgboost")._model_params_from_defaults()  # noqa: SLF001
+    lgb = PathoLogic("lightgbm")._model_params_from_defaults()  # noqa: SLF001
+    cat = PathoLogic("catboost")._model_params_from_defaults()  # noqa: SLF001
+    tabnet = PathoLogic("tabnet")._model_params_from_defaults()  # noqa: SLF001
+    mlp = PathoLogic("mlp")._model_params_from_defaults()  # noqa: SLF001
+    logreg = PathoLogic("logreg")._model_params_from_defaults()  # noqa: SLF001
+    rf = PathoLogic("random_forest")._model_params_from_defaults()  # noqa: SLF001
+    hgb = PathoLogic("hist_gbdt")._model_params_from_defaults()  # noqa: SLF001
+
+    assert float(xgb["reg_alpha"]) > 0.0
+    assert float(xgb["reg_lambda"]) > 0.0
+
+    assert float(lgb["reg_alpha"]) > 0.0
+    assert float(lgb["reg_lambda"]) > 0.0
+
+    assert float(cat["l2_leaf_reg"]) > 0.0
+
+    assert float(tabnet["weight_decay"]) > 0.0
+    assert float(tabnet["lambda_sparse"]) > 0.0
+
+    assert float(mlp["alpha"]) > 0.0
+    optimizer_cfg = mlp.get("optimizer", {})
+    assert isinstance(optimizer_cfg, dict)
+    assert float(optimizer_cfg.get("weight_decay", 0.0)) > 0.0
+
+    assert float(logreg["c"]) <= 1.0
+
+    assert int(rf["min_samples_leaf"]) >= 2
+    assert int(rf["min_samples_split"]) >= 4
+
+    assert float(hgb["l2_regularization"]) > 0.0

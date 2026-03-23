@@ -70,7 +70,7 @@ preprocess:
   tabnet_impute_strategy: median
 
 early_stopping:
-  enabled: false
+  enabled: true
   patience: 10
   min_delta: 0.0
   validation_split: 0.2
@@ -83,7 +83,7 @@ class_imbalance:
   mode: scale_pos_weight
   # Opsiyonel: pozitif sinif agirligini sabitlemek icin kullanilir.
   # Bu veri setindeki dengesizlik icin (67.5/32.5) yaklasik oran.
-  positive_class_weight: 2.08
+  positive_class_weight: 0.8
 
 # Global optimizer varsayılanları (model bazında override edilebilir).
 optimizer:

@@ -368,7 +368,14 @@ class MLPWrapper(ClassifierMixin, BaseEstimator):
         self.estimator = self
         self._logger = get_logger("pathologic.models.zoo.mlp")
 
-    def fit(self, x: np.ndarray, y: np.ndarray) -> MLPWrapper:
+    def fit(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        *,
+        x_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+    ) -> MLPWrapper:
         return self._fit_impl(
             x,
             y,
@@ -377,6 +384,8 @@ class MLPWrapper(ClassifierMixin, BaseEstimator):
             learning_rate_override=None,
             epochs_override=None,
             scheduler_override=None,
+            external_x_val=x_val,
+            external_y_val=y_val,
         )
 
     def fine_tune(
@@ -397,6 +406,8 @@ class MLPWrapper(ClassifierMixin, BaseEstimator):
             learning_rate_override=learning_rate,
             epochs_override=epochs,
             scheduler_override=scheduler_config,
+            external_x_val=None,
+            external_y_val=None,
         )
 
     def _fit_impl(
@@ -409,6 +420,8 @@ class MLPWrapper(ClassifierMixin, BaseEstimator):
         learning_rate_override: float | None,
         epochs_override: int | None,
         scheduler_override: dict[str, Any] | None,
+        external_x_val: np.ndarray | None = None,
+        external_y_val: np.ndarray | None = None,
     ) -> MLPWrapper:
         x_array = np.asarray(x, dtype=np.float32)
         y_array = np.asarray(y, dtype=np.float32).reshape(-1)
@@ -469,7 +482,24 @@ class MLPWrapper(ClassifierMixin, BaseEstimator):
         train_y = y_array
         val_tensor_x: torch.Tensor | None = None
         val_tensor_y: torch.Tensor | None = None
-        if early_stopping_enabled and 0.0 < validation_split < 1.0 and len(x_array) > 4:
+        if (
+            early_stopping_enabled
+            and external_x_val is not None
+            and external_y_val is not None
+            and len(external_x_val) > 0
+        ):
+            val_x_array = np.asarray(external_x_val, dtype=np.float32)
+            val_y_array = np.asarray(external_y_val, dtype=np.float32).reshape(-1)
+            val_tensor_x = torch.from_numpy(val_x_array).to(self.device)
+            val_tensor_y = torch.from_numpy(val_y_array).to(self.device)
+
+        if (
+            early_stopping_enabled
+            and val_tensor_x is None
+            and val_tensor_y is None
+            and 0.0 < validation_split < 1.0
+            and len(x_array) > 4
+        ):
             indices = np.arange(len(x_array))
             stratify_values: np.ndarray | None = None
             if np.unique(y_array).shape[0] > 1:

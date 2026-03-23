@@ -160,3 +160,18 @@ def test_train_filters_out_excluded_columns_override(
     assert model._feature_columns == ["revel_score"]  # noqa: SLF001
     assert len(predictions) > 0
 
+
+@pytest.mark.integration
+def test_train_accepts_explicit_validation_data_override(fake_dataset_path: str) -> None:
+    model = PathoLogic("logreg")
+    model.train(
+        fake_dataset_path,
+        label_column="label",
+        required_features=["revel_score", "cadd_phred"],
+        validation_split=0.0,
+        validation_data=fake_dataset_path,
+    )
+
+    assert model.is_trained is True
+    assert "f1" in model.last_train_metrics
+
