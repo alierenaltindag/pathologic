@@ -131,7 +131,6 @@ def test_error_analysis_includes_panel_performance_counts(tmp_path: Path) -> Non
     by_panel = {str(item["panel"]): item for item in rows if isinstance(item, dict)}
     assert by_panel["P1"]["total_samples"] == 4
     assert by_panel["P1"]["correct_predictions"] == 2
-<<<<<<< HEAD
     assert by_panel["P1"]["fp_count"] == 2
     assert by_panel["P1"]["fn_count"] == 0
     assert by_panel["P2"]["total_samples"] == 4
@@ -142,12 +141,6 @@ def test_error_analysis_includes_panel_performance_counts(tmp_path: Path) -> Non
     assert by_panel["P3"]["correct_predictions"] == 2
     assert by_panel["P3"]["fp_count"] == 0
     assert by_panel["P3"]["fn_count"] == 2
-=======
-    assert by_panel["P2"]["total_samples"] == 4
-    assert by_panel["P2"]["correct_predictions"] == 4
-    assert by_panel["P3"]["total_samples"] == 4
-    assert by_panel["P3"]["correct_predictions"] == 2
->>>>>>> 55309dc0c81e3d31e124478c737165369379fed6
 
     panel_csv = result.artifacts.get("panel_performance_csv")
     assert isinstance(panel_csv, str)

@@ -270,7 +270,6 @@ def build_error_analysis_run_summary(
             )
             if panel_performance
             else 0,
-<<<<<<< HEAD
             "panel_fp_count": int(
                 sum(
                     int(item.get("fp_count", 0))
@@ -289,8 +288,6 @@ def build_error_analysis_run_summary(
             )
             if panel_performance
             else 0,
-=======
->>>>>>> 55309dc0c81e3d31e124478c737165369379fed6
         }
         rows.append(row)
 
