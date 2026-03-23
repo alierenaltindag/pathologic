@@ -262,6 +262,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Calibration-aware winner penalty weight for Brier score",
     )
     parser.add_argument(
+        "--bootstrap-resamples",
+        type=int,
+        default=400,
+        help="Number of holdout bootstrap resamples for confidence intervals",
+    )
+    parser.add_argument(
+        "--bootstrap-confidence-level",
+        type=float,
+        default=0.95,
+        help="Confidence level used for holdout bootstrap confidence intervals",
+    )
+    parser.add_argument(
+        "--group-drift-min-samples",
+        type=int,
+        default=10,
+        help="Minimum samples required per group for group-drift summary",
+    )
+    parser.add_argument(
         "--disable-panel-thresholds",
         action="store_true",
         help="Disable per-panel F1-max threshold artifact generation",

@@ -308,6 +308,9 @@ def test_arg_parser_sets_quiet_inner_search_by_default() -> None:
     assert args.compute_cost_batch_runs == 10
     assert args.compute_cost_warmup_runs == 2
     assert args.compute_cost_batch_size == 256
+    assert args.bootstrap_resamples == 400
+    assert args.bootstrap_confidence_level == 0.95
+    assert args.group_drift_min_samples == 10
     assert args.disable_panel_thresholds is False
     assert args.panel_threshold_column == "Veri_Kaynagi_Paneli"
     assert args.panel_threshold_min_samples == 1
@@ -350,6 +353,25 @@ def test_arg_parser_accepts_panel_threshold_overrides() -> None:
     assert args.panel_threshold_column == "panel_id"
     assert args.panel_threshold_min_samples == 5
     assert args.panel_threshold_default == 0.42
+
+
+def test_arg_parser_accepts_reliability_diagnostics_overrides() -> None:
+    parser = build_arg_parser()
+    args = parser.parse_args(
+        [
+            "data.csv",
+            "--bootstrap-resamples",
+            "200",
+            "--bootstrap-confidence-level",
+            "0.9",
+            "--group-drift-min-samples",
+            "7",
+        ]
+    )
+
+    assert args.bootstrap_resamples == 200
+    assert args.bootstrap_confidence_level == 0.9
+    assert args.group_drift_min_samples == 7
 
 
 def test_arg_parser_accepts_compute_cost_overrides() -> None:

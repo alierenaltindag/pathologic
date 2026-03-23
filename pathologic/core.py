@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, Unpack, cast
 
 import numpy as np
@@ -683,7 +684,15 @@ class PathoLogic:
             }
             base_model_params["feature_names"] = list(active_features)
 
+        last_trial_fold_scores: list[float] = []
+        last_trial_params_signature: tuple[tuple[str, str], ...] | None = None
+
+        def _freeze_params_signature(params: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+            return tuple(sorted((str(key), repr(value)) for key, value in params.items()))
+
         def objective_fn(trial_params: dict[str, Any]) -> float:
+            nonlocal last_trial_fold_scores
+            nonlocal last_trial_params_signature
             fold_scores: list[float] = []
             with step_progress(
                 total=len(folds),
@@ -775,6 +784,9 @@ class PathoLogic:
                     fold_bar.update(1)
                     fold_bar.set_postfix(score=f"{float(score):.4f}")
 
+                    last_trial_fold_scores = list(fold_scores)
+                    last_trial_params_signature = _freeze_params_signature(trial_params)
+
             return float(np.mean(fold_scores))
 
         tuner = Tuner(
@@ -794,13 +806,32 @@ class PathoLogic:
             else None
         )
 
+        def _append_fold_scores_to_trial(trial: dict[str, Any]) -> None:
+            if not isinstance(trial, dict):
+                return
+            params = trial.get("params")
+            if not isinstance(params, dict):
+                return
+            if last_trial_params_signature != _freeze_params_signature(params):
+                return
+            trial["fold_scores"] = [float(score) for score in last_trial_fold_scores]
+            trial["fold_score_mean"] = (
+                float(np.mean(last_trial_fold_scores)) if last_trial_fold_scores else None
+            )
+            trial["fold_count"] = int(len(last_trial_fold_scores))
+
+        effective_callbacks: list[Callable[[dict[str, Any]], None]] = []
+        if tune_callbacks is not None:
+            effective_callbacks.extend(tune_callbacks)
+        effective_callbacks.append(_append_fold_scores_to_trial)
+
         result = tuner.tune(
             objective=objective_fn,
             search_space=cast(dict[str, dict[str, Any]], search_space_raw),
             n_trials=effective_trials,
             timeout_seconds=float(tune_config.get("timeout_minutes", 60)) * 60.0,
             direction="maximize",
-            callbacks=tune_callbacks,
+            callbacks=effective_callbacks,
             early_stopping=tune_early_stopping,
         )
 

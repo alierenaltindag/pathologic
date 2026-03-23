@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from pathologic import PathoLogic
+from pathologic.engine import Evaluator
 from pathologic.search import artifacts as _search_artifacts
 from pathologic.search import candidate as _search_candidate
 from pathologic.search import explainability as _search_explainability
@@ -37,6 +38,107 @@ StageUpdate = Callable[[str], None]
 
 _GPU_CAPABLE_ALIASES = {"xgboost", "lightgbm", "catboost", "tabnet"}
 _CUDA_REQUIRED_ALIASES = {"xgboost", "catboost", "tabnet"}
+
+
+def _build_group_drift_summary(
+    *,
+    dataset: pd.DataFrame,
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    group_columns: list[str],
+    min_group_samples: int,
+) -> dict[str, Any]:
+    group_column = next((col for col in group_columns if col in dataset.columns), None)
+    if group_column is None:
+        return {
+            "status": "skipped",
+            "reason": "missing_group_column",
+            "requested_group_columns": list(group_columns),
+        }
+
+    groups = dataset[group_column].astype(str)
+    y_true_arr = np.asarray(y_true, dtype=int).reshape(-1)
+    y_score_arr = np.asarray(y_score, dtype=float).reshape(-1)
+    y_pred_arr = (y_score_arr >= 0.5).astype(int)
+
+    if len(groups) != y_true_arr.shape[0]:
+        return {
+            "status": "failed",
+            "reason": "shape_mismatch",
+            "group_column": group_column,
+        }
+
+    group_counts = groups.value_counts(dropna=False)
+    eligible_groups = set(
+        str(name)
+        for name, count in group_counts.items()
+        if int(count) >= int(min_group_samples)
+    )
+
+    if len(eligible_groups) < 2:
+        return {
+            "status": "skipped",
+            "reason": "insufficient_groups",
+            "group_column": group_column,
+            "group_count": int(len(eligible_groups)),
+            "min_group_samples": int(min_group_samples),
+        }
+
+    mask = groups.astype(str).isin(eligible_groups).to_numpy()
+    evaluator = Evaluator(metric_names=["f1", "roc_auc", "auprc", "mcc", "precision", "recall"])
+    report = evaluator.evaluate(
+        y_true=y_true_arr[mask],
+        y_pred=y_pred_arr[mask],
+        y_score=y_score_arr[mask],
+        group_values=groups[mask],
+        group_name=group_column,
+    )
+
+    grouped_metrics = (
+        report.grouped_metrics if isinstance(report.grouped_metrics, dict) else {}
+    )
+    metric_ranges: dict[str, dict[str, Any]] = {}
+    for metric_name in ("f1", "roc_auc", "auprc", "mcc", "precision", "recall"):
+        values: list[tuple[str, float]] = []
+        for group_name, metrics in grouped_metrics.items():
+            if not isinstance(metrics, dict):
+                continue
+            value = metrics.get(metric_name)
+            if isinstance(value, (int, float)) and np.isfinite(float(value)):
+                values.append((str(group_name), float(value)))
+        if len(values) < 2:
+            continue
+        sorted_values = sorted(values, key=lambda item: item[1])
+        min_group, min_value = sorted_values[0]
+        max_group, max_value = sorted_values[-1]
+        metric_ranges[metric_name] = {
+            "min_group": min_group,
+            "min_value": min_value,
+            "max_group": max_group,
+            "max_value": max_value,
+            "range": float(max_value - min_value),
+        }
+
+    if not metric_ranges:
+        return {
+            "status": "skipped",
+            "reason": "insufficient_metric_coverage",
+            "group_column": group_column,
+            "group_count": int(len(eligible_groups)),
+        }
+
+    return {
+        "status": "ok",
+        "group_column": group_column,
+        "group_count": int(len(eligible_groups)),
+        "min_group_samples": int(min_group_samples),
+        "metric_ranges": metric_ranges,
+        "group_counts": {
+            str(name): int(count)
+            for name, count in group_counts.items()
+            if str(name) in eligible_groups
+        },
+    }
 
 
 def _emit_gpu_capability_warnings(
@@ -655,6 +757,23 @@ def evaluate_candidate(
             score_test=score_test,
             bins=int(args.calibration_bins),
         )
+        holdout_bootstrap = _search_artifacts.compute_holdout_bootstrap_artifacts(
+            y_true=y_test,
+            y_score=score_test,
+            n_resamples=int(getattr(args, "bootstrap_resamples", 400)),
+            confidence_level=float(getattr(args, "bootstrap_confidence_level", 0.95)),
+            seed=int(getattr(args, "seed", 42)),
+        )
+        group_drift = _build_group_drift_summary(
+            dataset=outer_test_df,
+            y_true=y_test,
+            y_score=score_test,
+            group_columns=[
+                str(getattr(args, "panel_threshold_column", "Veri_Kaynagi_Paneli")),
+                "gene_id",
+            ],
+            min_group_samples=int(getattr(args, "group_drift_min_samples", 10)),
+        )
         stage_update("calibration_eval", state="done")
 
         if not bool(args.disable_error_analysis):
@@ -733,6 +852,8 @@ def evaluate_candidate(
         row["test_metrics"] = metrics
         row["explainability"] = explain_payload
         row["calibration"] = calibration_payload
+        row["holdout_bootstrap"] = holdout_bootstrap
+        row["group_drift"] = group_drift
         row["panel_thresholds"] = panel_thresholds_payload
         row["error_analysis"] = error_analysis_payload
         row["compute_cost"] = compute_cost_payload

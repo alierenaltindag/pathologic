@@ -8,6 +8,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from pathologic.explain.visualizer import ExplainabilityVisualizer
 from pathologic.search import artifacts as _search_artifacts
 
@@ -82,6 +84,116 @@ def _overfitting_summary(
         "generalization_gap_ratio": gap_ratio,
         "overfitting_risk_level": risk_level,
         "overfitting_suspected": risk_level in {"moderate", "high"},
+    }
+
+
+def _extract_fold_distribution(row: dict[str, Any]) -> dict[str, Any]:
+    hpo_payload = row.get("hpo") if isinstance(row.get("hpo"), dict) else {}
+    trials = hpo_payload.get("trials") if isinstance(hpo_payload.get("trials"), list) else []
+    collected: list[float] = []
+    for trial in trials:
+        if not isinstance(trial, dict):
+            continue
+        fold_scores = trial.get("fold_scores") if isinstance(trial.get("fold_scores"), list) else []
+        for value in fold_scores:
+            if isinstance(value, (int, float)) and np.isfinite(float(value)):
+                collected.append(float(value))
+
+    if not collected:
+        return {
+            "status": "missing",
+            "count": 0,
+        }
+
+    values = np.asarray(collected, dtype=float)
+    return {
+        "status": "ok",
+        "count": int(values.shape[0]),
+        "mean": float(np.mean(values)),
+        "std": float(np.std(values)),
+        "min": float(np.min(values)),
+        "max": float(np.max(values)),
+        "p25": float(np.percentile(values, 25)),
+        "p50": float(np.percentile(values, 50)),
+        "p75": float(np.percentile(values, 75)),
+    }
+
+
+def _extract_learning_curve(row: dict[str, Any]) -> dict[str, Any]:
+    hpo_payload = row.get("hpo") if isinstance(row.get("hpo"), dict) else {}
+    trials = hpo_payload.get("trials") if isinstance(hpo_payload.get("trials"), list) else []
+    points: list[dict[str, Any]] = []
+    best_so_far = float("-inf")
+    for idx, trial in enumerate(trials, start=1):
+        if not isinstance(trial, dict):
+            continue
+        score = trial.get("score")
+        if not isinstance(score, (int, float)):
+            continue
+        score_float = float(score)
+        best_so_far = max(best_so_far, score_float)
+        points.append(
+            {
+                "trial_index": int(idx),
+                "score": score_float,
+                "best_so_far": float(best_so_far),
+            }
+        )
+
+    if not points:
+        return {
+            "status": "missing",
+            "points": [],
+        }
+
+    return {
+        "status": "ok",
+        "points": points,
+        "total_points": int(len(points)),
+        "improvement": float(points[-1]["best_so_far"] - points[0]["best_so_far"]),
+    }
+
+
+def _extract_calibration_joint_summary(calibration_summary: dict[str, Any]) -> dict[str, Any]:
+    raw_payload = calibration_summary.get("raw") if isinstance(calibration_summary.get("raw"), dict) else {}
+    raw_ece = raw_payload.get("ece") if raw_payload.get("status") == "ok" else None
+    raw_brier = raw_payload.get("brier_score") if raw_payload.get("status") == "ok" else None
+
+    best_method: str | None = None
+    best_ece: float | None = None
+    best_brier: float | None = None
+    for method_name, method_summary in calibration_summary.items():
+        if not isinstance(method_summary, dict):
+            continue
+        if method_summary.get("status") != "ok":
+            continue
+        method_ece = method_summary.get("ece")
+        method_brier = method_summary.get("brier_score")
+        if not isinstance(method_ece, (int, float)) or not isinstance(method_brier, (int, float)):
+            continue
+        method_ece_f = float(method_ece)
+        method_brier_f = float(method_brier)
+        if best_method is None or (method_ece_f, method_brier_f) < (best_ece, best_brier):
+            best_method = str(method_name)
+            best_ece = method_ece_f
+            best_brier = method_brier_f
+
+    return {
+        "raw_ece": float(raw_ece) if isinstance(raw_ece, (int, float)) else None,
+        "raw_brier": float(raw_brier) if isinstance(raw_brier, (int, float)) else None,
+        "best_method": best_method,
+        "best_ece": best_ece,
+        "best_brier": best_brier,
+        "ece_improvement": (
+            float(raw_ece) - float(best_ece)
+            if isinstance(raw_ece, (int, float)) and isinstance(best_ece, (int, float))
+            else None
+        ),
+        "brier_improvement": (
+            float(raw_brier) - float(best_brier)
+            if isinstance(raw_brier, (int, float)) and isinstance(best_brier, (int, float))
+            else None
+        ),
     }
 
 
@@ -310,37 +422,12 @@ def _build_train_report_payload(
             if isinstance(calibration_payload.get("summary"), dict)
             else {}
         )
-        raw_calibration = (
-            calibration_summary.get("raw")
-            if isinstance(calibration_summary.get("raw"), dict)
-            else {}
-        )
-        raw_ece = raw_calibration.get("ece") if raw_calibration.get("status") == "ok" else None
-        raw_brier = (
-            raw_calibration.get("brier_score")
-            if raw_calibration.get("status") == "ok"
-            else None
-        )
-
-        best_calibration_method: str | None = None
-        best_calibration_ece: float | None = None
-        best_calibration_brier: float | None = None
-        for method_name, method_summary in calibration_summary.items():
-            if not isinstance(method_summary, dict) or method_summary.get("status") != "ok":
-                continue
-            method_ece = float(method_summary.get("ece", float("inf")))
-            method_brier = float(method_summary.get("brier_score", float("inf")))
-            if best_calibration_method is None:
-                best_calibration_method = str(method_name)
-                best_calibration_ece = method_ece
-                best_calibration_brier = method_brier
-                continue
-            assert best_calibration_ece is not None
-            assert best_calibration_brier is not None
-            if (method_ece, method_brier) < (best_calibration_ece, best_calibration_brier):
-                best_calibration_method = str(method_name)
-                best_calibration_ece = method_ece
-                best_calibration_brier = method_brier
+        calibration_joint = _extract_calibration_joint_summary(calibration_summary)
+        raw_ece = calibration_joint.get("raw_ece")
+        raw_brier = calibration_joint.get("raw_brier")
+        best_calibration_method = calibration_joint.get("best_method")
+        best_calibration_ece = calibration_joint.get("best_ece")
+        best_calibration_brier = calibration_joint.get("best_brier")
 
         panel_thresholds = (
             row.get("panel_thresholds") if isinstance(row.get("panel_thresholds"), dict) else {}
@@ -384,6 +471,12 @@ def _build_train_report_payload(
             cv_score=cv_objective_score,
             test_score=test_objective_score,
         )
+        fold_distribution = _extract_fold_distribution(row)
+        learning_curve = _extract_learning_curve(row)
+        holdout_bootstrap = (
+            row.get("holdout_bootstrap") if isinstance(row.get("holdout_bootstrap"), dict) else {}
+        )
+        group_drift = row.get("group_drift") if isinstance(row.get("group_drift"), dict) else {}
 
         candidate_rows.append(
             {
@@ -404,6 +497,8 @@ def _build_train_report_payload(
                 "best_calibration_method": best_calibration_method,
                 "best_calibration_ece": best_calibration_ece,
                 "best_calibration_brier": best_calibration_brier,
+                "calibration_ece_improvement": calibration_joint.get("ece_improvement"),
+                "calibration_brier_improvement": calibration_joint.get("brier_improvement"),
                 "panel_threshold_status": str(panel_thresholds.get("status", "missing")),
                 "panel_count": int(panel_summary.get("panel_count", 0)) if panel_summary else 0,
                 "optimized_panel_count": int(panel_summary.get("optimized_panel_count", 0))
@@ -423,6 +518,10 @@ def _build_train_report_payload(
                     "process_rss_peak_delta_mb"
                 ),
                 "compute_cost_report_html": compute_cost_artifacts.get("compute_cost_report_html"),
+                "fold_distribution": fold_distribution,
+                "holdout_bootstrap": holdout_bootstrap,
+                "group_drift": group_drift,
+                "learning_curve": learning_curve,
                 **overfitting,
             }
         )
@@ -536,6 +635,52 @@ def _build_train_report_payload(
                 )
             ),
         },
+        "reliability_sections": {
+            "fold_distribution": {
+                "description": "Cross-validation fold score distribution aggregated from HPO trial fold scores.",
+                "available_candidates": int(
+                    sum(
+                        1
+                        for row in candidate_rows
+                        if isinstance(row.get("fold_distribution"), dict)
+                        and str(row["fold_distribution"].get("status")) == "ok"
+                    )
+                ),
+            },
+            "holdout_bootstrap": {
+                "description": "No-retrain bootstrap confidence intervals computed on holdout predictions.",
+                "available_candidates": int(
+                    sum(
+                        1
+                        for row in candidate_rows
+                        if isinstance(row.get("holdout_bootstrap"), dict)
+                        and str(row["holdout_bootstrap"].get("status")) == "ok"
+                    )
+                ),
+            },
+            "group_drift": {
+                "description": "Group-level performance spread over selected metadata column(s).",
+                "available_candidates": int(
+                    sum(
+                        1
+                        for row in candidate_rows
+                        if isinstance(row.get("group_drift"), dict)
+                        and str(row["group_drift"].get("status")) == "ok"
+                    )
+                ),
+            },
+            "learning_curve": {
+                "description": "Trial-wise optimization curve (score and cumulative best) from HPO search.",
+                "available_candidates": int(
+                    sum(
+                        1
+                        for row in candidate_rows
+                        if isinstance(row.get("learning_curve"), dict)
+                        and str(row["learning_curve"].get("status")) == "ok"
+                    )
+                ),
+            },
+        },
         "candidates": candidate_rows,
     }
 
@@ -584,6 +729,8 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
             f"<td>{_fmt(item.get('recall'))}</td>"
             f"<td>{_fmt(item.get('raw_ece'))}</td>"
             f"<td>{_fmt(item.get('raw_brier'))}</td>"
+            f"<td>{_fmt(item.get('calibration_ece_improvement'))}</td>"
+            f"<td>{_fmt(item.get('calibration_brier_improvement'))}</td>"
             f"<td>{_fmt(item.get('objective_score'))}</td>"
             f"<td>{_fmt(item.get('runtime_seconds'))}</td>"
             f"<td>{_fmt(item.get('train_total_seconds'))}</td>"
@@ -592,12 +739,16 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
             f"<td>{_fmt(item.get('peak_vram_mb'))}</td>"
             f"<td>{_fmt(item.get('train_memory_delta_mb'))}</td>"
             f"<td>{_fmt(item.get('train_memory_peak_delta_mb'))}</td>"
+            f"<td>{_fmt((item.get('fold_distribution') or {}).get('std'))}</td>"
+            f"<td>{_fmt((item.get('group_drift') or {}).get('group_column'))}</td>"
+            f"<td>{_fmt((item.get('group_drift') or {}).get('group_count'))}</td>"
+            f"<td>{_fmt((item.get('learning_curve') or {}).get('total_points'))}</td>"
             f"<td>{_fmt(item.get('compute_cost_report_html'))}</td>"
             "</tr>"
         )
 
     if not table_rows:
-        table_rows.append("<tr><td colspan='24'>No candidate rows available.</td></tr>")
+        table_rows.append("<tr><td colspan='30'>No candidate rows available.</td></tr>")
 
     warning_rows: list[str] = []
     for item in warning_items:
@@ -616,7 +767,167 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
     if not warning_rows:
         warning_rows.append("<tr><td colspan='6'>No split manifest warnings.</td></tr>")
 
+    def _render_learning_curve_svg(points: list[dict[str, Any]]) -> str:
+        if not points:
+            return "<div>No learning-curve points available.</div>"
+        values: list[float] = []
+        for item in points:
+            score = item.get("score") if isinstance(item, dict) else None
+            if isinstance(score, (int, float)) and np.isfinite(float(score)):
+                values.append(float(score))
+        if len(values) < 2:
+            return "<div>Not enough learning-curve points for visualization.</div>"
+
+        width = 480.0
+        height = 160.0
+        padding = 16.0
+        min_v = min(values)
+        max_v = max(values)
+        span = max(max_v - min_v, 1e-9)
+        x_step = (width - (2.0 * padding)) / float(max(len(values) - 1, 1))
+
+        polyline_points: list[str] = []
+        for idx, value in enumerate(values):
+            x = padding + (x_step * float(idx))
+            y = padding + ((max_v - value) / span) * (height - (2.0 * padding))
+            polyline_points.append(f"{x:.2f},{y:.2f}")
+
+        return (
+            "<svg width='100%' viewBox='0 0 480 160' role='img' aria-label='Learning curve sparkline'>"
+            "<rect x='0' y='0' width='480' height='160' fill='#f8fafc' stroke='#dbe4ee'/>"
+            "<polyline fill='none' stroke='#0f766e' stroke-width='2.5' points='"
+            + " ".join(polyline_points)
+            + "'/>"
+            "</svg>"
+        )
+
+    def _calibration_delta_badge(*, label: str, value: Any) -> str:
+        if not isinstance(value, (int, float)) or not np.isfinite(float(value)):
+            return (
+                "<span style='display:inline-block;padding:4px 8px;border-radius:999px;"
+                "font-size:12px;background:#e5e7eb;color:#374151;border:1px solid #d1d5db;'>"
+                + escape(f"{label}: n/a")
+                + "</span>"
+            )
+
+        value_float = float(value)
+        if value_float > 0:
+            bg = "#dcfce7"
+            fg = "#166534"
+            border = "#86efac"
+            symbol = "+"
+        elif value_float < 0:
+            bg = "#fee2e2"
+            fg = "#991b1b"
+            border = "#fecaca"
+            symbol = ""
+        else:
+            bg = "#f3f4f6"
+            fg = "#374151"
+            border = "#d1d5db"
+            symbol = ""
+
+        return (
+            "<span style='display:inline-block;padding:4px 8px;border-radius:999px;"
+            "font-size:12px;font-weight:600;background:"
+            + bg
+            + ";color:"
+            + fg
+            + ";border:1px solid "
+            + border
+            + ";'>"
+            + escape(f"{label}: {symbol}{value_float:.6f}")
+            + "</span>"
+        )
+
+    winner_candidate_name = str(winner.get("candidate", ""))
+    winner_candidate_row = next(
+        (
+            item
+            for item in candidates
+            if isinstance(item, dict) and str(item.get("candidate", "")) == winner_candidate_name
+        ),
+        {},
+    )
+
+    winner_bootstrap = (
+        winner_candidate_row.get("holdout_bootstrap")
+        if isinstance(winner_candidate_row.get("holdout_bootstrap"), dict)
+        else {}
+    )
+    winner_bootstrap_metrics = (
+        winner_bootstrap.get("metrics") if isinstance(winner_bootstrap.get("metrics"), dict) else {}
+    )
+    bootstrap_rows: list[str] = []
+    for metric_name in ("f1", "roc_auc", "auprc", "mcc", "precision", "recall"):
+        item = winner_bootstrap_metrics.get(metric_name)
+        if not isinstance(item, dict):
+            continue
+        point_estimate = item.get("point_estimate")
+        ci_low = item.get("ci_low")
+        ci_high = item.get("ci_high")
+        bootstrap_rows.append(
+            "<tr>"
+            f"<td>{escape(metric_name)}</td>"
+            f"<td>{escape('-' if point_estimate is None else f'{float(point_estimate):.6f}')}</td>"
+            f"<td>{escape('-' if ci_low is None else f'{float(ci_low):.6f}')}</td>"
+            f"<td>{escape('-' if ci_high is None else f'{float(ci_high):.6f}')}</td>"
+            "</tr>"
+        )
+    if not bootstrap_rows:
+        bootstrap_rows.append("<tr><td colspan='4'>No bootstrap metrics available for winner.</td></tr>")
+
+    winner_group_drift = (
+        winner_candidate_row.get("group_drift")
+        if isinstance(winner_candidate_row.get("group_drift"), dict)
+        else {}
+    )
+    winner_group_ranges = (
+        winner_group_drift.get("metric_ranges")
+        if isinstance(winner_group_drift.get("metric_ranges"), dict)
+        else {}
+    )
+    group_rows: list[str] = []
+    for metric_name in ("f1", "roc_auc", "auprc", "mcc"):
+        item = winner_group_ranges.get(metric_name)
+        if not isinstance(item, dict):
+            continue
+        range_value = item.get("range")
+        range_text = "-" if range_value is None else f"{float(range_value):.6f}"
+        group_rows.append(
+            "<tr>"
+            f"<td>{escape(metric_name)}</td>"
+            f"<td>{escape(str(item.get('min_group', '-')))}</td>"
+            f"<td>{escape(str(item.get('max_group', '-')))}</td>"
+            f"<td>{escape(range_text)}</td>"
+            "</tr>"
+        )
+    if not group_rows:
+        group_rows.append("<tr><td colspan='4'>No group-drift metric ranges for winner.</td></tr>")
+
+    winner_learning_curve = (
+        winner_candidate_row.get("learning_curve")
+        if isinstance(winner_candidate_row.get("learning_curve"), dict)
+        else {}
+    )
+    winner_learning_points = (
+        winner_learning_curve.get("points") if isinstance(winner_learning_curve.get("points"), list) else []
+    )
+    learning_curve_svg = _render_learning_curve_svg(
+        [item for item in winner_learning_points if isinstance(item, dict)]
+    )
+    ece_delta_badge = _calibration_delta_badge(
+        label="ECE delta (raw-best)",
+        value=winner_candidate_row.get("calibration_ece_improvement"),
+    )
+    brier_delta_badge = _calibration_delta_badge(
+        label="Brier delta (raw-best)",
+        value=winner_candidate_row.get("calibration_brier_improvement"),
+    )
+
     winner_json = escape(json.dumps(winner, ensure_ascii=True, indent=2))
+    reliability_sections = report.get("reliability_sections") if isinstance(report.get("reliability_sections"), dict) else {}
+    reliability_json = escape(json.dumps(reliability_sections, ensure_ascii=True, indent=2))
     html = (
         "<html><head><meta charset='utf-8'><title>Train Report</title>"
         "<style>"
@@ -641,9 +952,29 @@ def _render_train_report_html(*, report: dict[str, Any], output_path: Path) -> N
         + "".join(warning_rows)
         + "</tbody></table></div>"
         "<div class='card'><h2>Candidate Quick Summary</h2>"
-        "<table><thead><tr><th>Candidate</th><th>Status</th><th>CV Objective</th><th>Test Objective</th><th>Gap(CV-Test)</th><th>Gap Ratio</th><th>Overfit Risk</th><th>F1</th><th>ROC-AUC</th><th>AUPRC</th><th>MCC</th><th>Precision</th><th>Recall</th><th>ECE(raw)</th><th>Brier(raw)</th><th>Objective</th><th>Runtime(s)</th><th>Train(s)</th><th>SingleInf(ms)</th><th>BatchInf(ms)</th><th>PeakVRAM(MB)</th><th>TrainMemDelta(MB)</th><th>TrainMemPeakDelta(MB)</th><th>ComputeCostReport</th></tr></thead><tbody>"
+        "<table><thead><tr><th>Candidate</th><th>Status</th><th>CV Objective</th><th>Test Objective</th><th>Gap(CV-Test)</th><th>Gap Ratio</th><th>Overfit Risk</th><th>F1</th><th>ROC-AUC</th><th>AUPRC</th><th>MCC</th><th>Precision</th><th>Recall</th><th>ECE(raw)</th><th>Brier(raw)</th><th>ECE Delta(raw-best)</th><th>Brier Delta(raw-best)</th><th>Objective</th><th>Runtime(s)</th><th>Train(s)</th><th>SingleInf(ms)</th><th>BatchInf(ms)</th><th>PeakVRAM(MB)</th><th>TrainMemDelta(MB)</th><th>TrainMemPeakDelta(MB)</th><th>Fold Std</th><th>Drift Group Column</th><th>Drift Group Count</th><th>Learning Points</th><th>ComputeCostReport</th></tr></thead><tbody>"
         + "".join(table_rows)
         + "</tbody></table></div>"
+        "<div class='card'><h2>Reliability Visual Overview</h2>"
+        f"<div><strong>Winner:</strong> {escape(winner_candidate_name or 'unknown')}</div>"
+        "<h3>Calibration Delta Badges (Winner)</h3>"
+        "<div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;'>"
+        + ece_delta_badge
+        + brier_delta_badge
+        + "</div>"
+        "<h3>Learning Curve (Winner)</h3>"
+        + learning_curve_svg
+        + "<h3>Holdout Bootstrap CI (Winner)</h3>"
+        "<table><thead><tr><th>Metric</th><th>Point</th><th>CI Low</th><th>CI High</th></tr></thead><tbody>"
+        + "".join(bootstrap_rows)
+        + "</tbody></table>"
+        "<h3>Group Drift Ranges (Winner)</h3>"
+        "<table><thead><tr><th>Metric</th><th>Min Group</th><th>Max Group</th><th>Range</th></tr></thead><tbody>"
+        + "".join(group_rows)
+        + "</tbody></table></div>"
+        "<div class='card'><h2>Reliability Sections</h2><pre>"
+        + reliability_json
+        + "</pre></div>"
         "<div class='card'><h2>Winner Detailed Configuration</h2>"
         "<pre>"
         + winner_json

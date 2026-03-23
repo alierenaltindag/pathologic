@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pathologic.search.reporting import _build_split_manifest_warnings, _build_train_report_payload
 
 
@@ -11,7 +13,33 @@ def test_build_train_report_payload_includes_overfitting_metrics() -> None:
             "status": "ok",
             "runtime_seconds": 12.3,
             "test_metrics": {"f1": 0.78, "roc_auc": 0.86},
-            "hpo": {"best_score": 0.91},
+            "hpo": {
+                "best_score": 0.91,
+                "trials": [
+                    {"params": {"max_depth": 4}, "score": 0.90, "fold_scores": [0.88, 0.91, 0.89]},
+                    {"params": {"max_depth": 6}, "score": 0.91, "fold_scores": [0.92, 0.90, 0.91]},
+                ],
+            },
+            "calibration": {
+                "summary": {
+                    "raw": {"status": "ok", "ece": 0.12, "brier_score": 0.20},
+                    "platt": {"status": "ok", "ece": 0.09, "brier_score": 0.18},
+                }
+            },
+            "holdout_bootstrap": {
+                "status": "ok",
+                "metrics": {
+                    "f1": {"point_estimate": 0.78, "ci_low": 0.70, "ci_high": 0.84}
+                },
+            },
+            "group_drift": {
+                "status": "ok",
+                "group_column": "gene_id",
+                "group_count": 4,
+                "metric_ranges": {
+                    "f1": {"range": 0.12, "min_group": "g1", "max_group": "g2"}
+                },
+            },
             "selected_params_source": "hpo",
         }
     ]
@@ -33,6 +61,16 @@ def test_build_train_report_payload_includes_overfitting_metrics() -> None:
     assert row["generalization_gap"] == 0.13
     assert row["overfitting_risk_level"] == "high"
     assert row["overfitting_suspected"] is True
+    assert row["calibration_ece_improvement"] == 0.03
+    assert row["calibration_brier_improvement"] == pytest.approx(0.02)
+    assert row["fold_distribution"]["status"] == "ok"
+    assert row["learning_curve"]["status"] == "ok"
+    reliability_sections = payload.get("reliability_sections")
+    assert isinstance(reliability_sections, dict)
+    assert reliability_sections["fold_distribution"]["available_candidates"] == 1
+    assert reliability_sections["holdout_bootstrap"]["available_candidates"] == 1
+    assert reliability_sections["group_drift"]["available_candidates"] == 1
+    assert reliability_sections["learning_curve"]["available_candidates"] == 1
     split_warnings = payload.get("split_manifest_warnings")
     assert isinstance(split_warnings, dict)
     assert split_warnings.get("status") == "ok"

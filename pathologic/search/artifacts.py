@@ -10,6 +10,14 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import (
+    average_precision_score,
+    f1_score,
+    matthews_corrcoef,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 
 from pathologic import PathoLogic
 from pathologic.engine import Evaluator
@@ -25,6 +33,104 @@ from pathologic.utils.calibration import (
     save_reliability_diagram,
 )
 from pathologic.utils.distribution_diagnostics import normality_report, save_qq_plot
+
+
+def compute_holdout_bootstrap_artifacts(
+    *,
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    n_resamples: int = 400,
+    confidence_level: float = 0.95,
+    seed: int = 42,
+    threshold: float = 0.5,
+) -> dict[str, Any]:
+    y_true_arr = np.asarray(y_true, dtype=int).reshape(-1)
+    y_score_arr = np.asarray(y_score, dtype=float).reshape(-1)
+    if y_true_arr.shape[0] != y_score_arr.shape[0]:
+        return {
+            "status": "failed",
+            "reason": "shape_mismatch",
+            "sample_count": int(y_true_arr.shape[0]),
+        }
+    if y_true_arr.shape[0] == 0:
+        return {
+            "status": "failed",
+            "reason": "empty_input",
+            "sample_count": 0,
+        }
+
+    y_pred_arr = (y_score_arr >= float(threshold)).astype(int)
+    point_metrics: dict[str, float | None] = {
+        "f1": float(f1_score(y_true_arr, y_pred_arr, zero_division=0)),
+        "mcc": float(matthews_corrcoef(y_true_arr, y_pred_arr)),
+        "precision": float(precision_score(y_true_arr, y_pred_arr, zero_division=0)),
+        "recall": float(recall_score(y_true_arr, y_pred_arr, zero_division=0)),
+        "roc_auc": None,
+        "auprc": None,
+    }
+    if np.unique(y_true_arr).size >= 2:
+        point_metrics["roc_auc"] = float(roc_auc_score(y_true_arr, y_score_arr))
+        point_metrics["auprc"] = float(average_precision_score(y_true_arr, y_score_arr))
+
+    rng = np.random.default_rng(int(seed))
+    alpha = 1.0 - float(confidence_level)
+    low_q = 100.0 * (alpha / 2.0)
+    high_q = 100.0 * (1.0 - (alpha / 2.0))
+
+    metric_samples: dict[str, list[float]] = {
+        "f1": [],
+        "mcc": [],
+        "precision": [],
+        "recall": [],
+        "roc_auc": [],
+        "auprc": [],
+    }
+
+    sample_count = int(y_true_arr.shape[0])
+    for _ in range(int(n_resamples)):
+        idx = rng.integers(0, sample_count, size=sample_count)
+        y_true_b = y_true_arr[idx]
+        y_score_b = y_score_arr[idx]
+        y_pred_b = (y_score_b >= float(threshold)).astype(int)
+
+        metric_samples["f1"].append(float(f1_score(y_true_b, y_pred_b, zero_division=0)))
+        metric_samples["mcc"].append(float(matthews_corrcoef(y_true_b, y_pred_b)))
+        metric_samples["precision"].append(
+            float(precision_score(y_true_b, y_pred_b, zero_division=0))
+        )
+        metric_samples["recall"].append(float(recall_score(y_true_b, y_pred_b, zero_division=0)))
+
+        if np.unique(y_true_b).size >= 2:
+            metric_samples["roc_auc"].append(float(roc_auc_score(y_true_b, y_score_b)))
+            metric_samples["auprc"].append(float(average_precision_score(y_true_b, y_score_b)))
+
+    metric_ci: dict[str, Any] = {}
+    for metric_name, samples in metric_samples.items():
+        point_estimate = point_metrics.get(metric_name)
+        if not samples:
+            metric_ci[metric_name] = {
+                "point_estimate": point_estimate,
+                "ci_low": None,
+                "ci_high": None,
+                "successful_resamples": 0,
+            }
+            continue
+        values = np.asarray(samples, dtype=float)
+        metric_ci[metric_name] = {
+            "point_estimate": point_estimate,
+            "ci_low": float(np.percentile(values, low_q)),
+            "ci_high": float(np.percentile(values, high_q)),
+            "successful_resamples": int(values.shape[0]),
+        }
+
+    return {
+        "status": "ok",
+        "sample_count": sample_count,
+        "n_resamples": int(n_resamples),
+        "confidence_level": float(confidence_level),
+        "threshold": float(threshold),
+        "metrics": metric_ci,
+    }
 
 
 def candidate_slug(name: str) -> str:

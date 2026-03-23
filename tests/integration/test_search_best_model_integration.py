@@ -237,9 +237,23 @@ def test_search_best_model_script_generates_artifacts(tmp_path: Path) -> None:
     assert "generalization_gap_ratio" in candidate_summary
     assert "overfitting_risk_level" in candidate_summary
     assert "overfitting_suspected" in candidate_summary
+    assert "fold_distribution" in candidate_summary
+    assert "holdout_bootstrap" in candidate_summary
+    assert "group_drift" in candidate_summary
+    assert "learning_curve" in candidate_summary
+
+    reliability_sections = train_report.get("reliability_sections")
+    assert isinstance(reliability_sections, dict)
+    for key in ("fold_distribution", "holdout_bootstrap", "group_drift", "learning_curve"):
+        section = reliability_sections.get(key)
+        assert isinstance(section, dict)
+        assert "available_candidates" in section
 
     train_report_html = train_report_html_path.read_text(encoding="utf-8")
     assert "Split Manifest Warnings" in train_report_html
+    assert "Reliability Visual Overview" in train_report_html
+    assert "Calibration Delta Badges (Winner)" in train_report_html
+    assert "Reliability Sections" in train_report_html
 
 
 def test_search_best_model_hybrid_runs_nas_only_for_neural_member(tmp_path: Path) -> None:
