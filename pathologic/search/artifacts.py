@@ -244,6 +244,11 @@ def build_error_analysis_run_summary(
         summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
         surrogate = summary.get("surrogate_tree") if isinstance(summary.get("surrogate_tree"), dict) else {}
         clustering = summary.get("clustering") if isinstance(summary.get("clustering"), dict) else {}
+        panel_performance = (
+            summary.get("panel_performance")
+            if isinstance(summary.get("panel_performance"), dict)
+            else {}
+        )
 
         row: dict[str, Any] = {
             "candidate": candidate_name,
@@ -253,6 +258,36 @@ def build_error_analysis_run_summary(
             "error_rate": float(summary.get("error_rate", 0.0)) if summary else 0.0,
             "surrogate_status": str(surrogate.get("status", "unknown")),
             "clustering_status": str(clustering.get("status", "unknown")),
+            "panel_status": str(panel_performance.get("status", "skipped")),
+            "panel_count": int(panel_performance.get("panel_count", 0))
+            if panel_performance
+            else 0,
+            "panel_total_samples": int(panel_performance.get("total_samples", 0))
+            if panel_performance
+            else 0,
+            "panel_correct_predictions": int(
+                panel_performance.get("total_correct_predictions", 0)
+            )
+            if panel_performance
+            else 0,
+            "panel_fp_count": int(
+                sum(
+                    int(item.get("fp_count", 0))
+                    for item in panel_performance.get("rows", [])
+                    if isinstance(item, dict)
+                )
+            )
+            if panel_performance
+            else 0,
+            "panel_fn_count": int(
+                sum(
+                    int(item.get("fn_count", 0))
+                    for item in panel_performance.get("rows", [])
+                    if isinstance(item, dict)
+                )
+            )
+            if panel_performance
+            else 0,
         }
         rows.append(row)
 

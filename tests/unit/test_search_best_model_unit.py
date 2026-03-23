@@ -544,6 +544,16 @@ def test_build_error_analysis_run_summary_collects_candidate_rows() -> None:
                         "error_rate": 0.2,
                         "surrogate_tree": {"status": "ok"},
                         "clustering": {"status": "ok"},
+                        "panel_performance": {
+                            "status": "ok",
+                            "panel_count": 2,
+                            "total_samples": 50,
+                            "total_correct_predictions": 40,
+                            "rows": [
+                                {"panel": "P1", "fp_count": 3, "fn_count": 2},
+                                {"panel": "P2", "fp_count": 1, "fn_count": 4},
+                            ],
+                        },
                     },
                 },
             },
@@ -567,6 +577,13 @@ def test_build_error_analysis_run_summary_collects_candidate_rows() -> None:
     assert len(payload["rows"]) == 2
     assert payload["rows"][0]["is_winner"] is True
     assert payload["rows"][0]["error_count"] == 10
+    assert payload["rows"][0]["panel_status"] == "ok"
+    assert payload["rows"][0]["panel_count"] == 2
+    assert payload["rows"][0]["panel_total_samples"] == 50
+    assert payload["rows"][0]["panel_correct_predictions"] == 40
+    assert payload["rows"][0]["panel_fp_count"] == 4
+    assert payload["rows"][0]["panel_fn_count"] == 6
+    assert payload["rows"][1]["panel_status"] == "skipped"
 
 
 def test_run_candidate_search_loop_forwards_outer_calibration_csv(monkeypatch, tmp_path: Path) -> None:

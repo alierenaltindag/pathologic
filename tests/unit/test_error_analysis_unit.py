@@ -100,6 +100,52 @@ def test_error_analysis_returns_cluster_summary_when_errors_exist(tmp_path: Path
         assert "dbscan_profiles" in clustering
         assert "kmeans_cluster_profiles_csv" in result.artifacts
 
+
+def test_error_analysis_includes_panel_performance_counts(tmp_path: Path) -> None:
+    dataset = _sample_error_dataset()
+    y_true = dataset["label"].to_numpy(dtype=int)
+    y_pred = np.array([1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0], dtype=int)
+    y_score = np.linspace(0.2, 0.9, num=len(dataset))
+
+    analyzer = MultiDimensionalErrorAnalyzer(random_state=42)
+    result = analyzer.analyze_candidate(
+        candidate_name="xgboost",
+        y_true=y_true,
+        y_pred=y_pred,
+        y_score=y_score,
+        dataset=dataset,
+        output_dir=tmp_path,
+        detailed=False,
+    )
+
+    panel_summary = result.summary.get("panel_performance")
+    assert isinstance(panel_summary, dict)
+    assert panel_summary.get("status") == "ok"
+    assert panel_summary.get("panel_column") == "Veri_Kaynagi_Paneli"
+    assert panel_summary.get("panel_count") == 3
+    assert panel_summary.get("total_samples") == len(dataset)
+    assert panel_summary.get("total_correct_predictions") == 8
+
+    rows = panel_summary.get("rows")
+    assert isinstance(rows, list)
+    by_panel = {str(item["panel"]): item for item in rows if isinstance(item, dict)}
+    assert by_panel["P1"]["total_samples"] == 4
+    assert by_panel["P1"]["correct_predictions"] == 2
+    assert by_panel["P1"]["fp_count"] == 2
+    assert by_panel["P1"]["fn_count"] == 0
+    assert by_panel["P2"]["total_samples"] == 4
+    assert by_panel["P2"]["correct_predictions"] == 4
+    assert by_panel["P2"]["fp_count"] == 0
+    assert by_panel["P2"]["fn_count"] == 0
+    assert by_panel["P3"]["total_samples"] == 4
+    assert by_panel["P3"]["correct_predictions"] == 2
+    assert by_panel["P3"]["fp_count"] == 0
+    assert by_panel["P3"]["fn_count"] == 2
+
+    panel_csv = result.artifacts.get("panel_performance_csv")
+    assert isinstance(panel_csv, str)
+    assert Path(panel_csv).exists()
+
 def test_pattern_concentration_analysis_logic() -> None:
     dataset = pd.DataFrame({
         "feature__gnomAD_log": [-5.0, -2.3, -0.3, -6.5],

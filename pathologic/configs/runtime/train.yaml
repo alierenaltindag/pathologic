@@ -21,6 +21,8 @@ ui:
 split:
   # Bölme modu: cross_validation veya holdout.
   mode: cross_validation
+  # True oldugunda ayni gen train/val/test bolumlerinde yer alabilir.
+  allow_same_gene_overlap: true
   # Cross-validation modu parametreleri.
   cross_validation:
     # Kaç fold üretileceğini belirtir.

@@ -18,6 +18,7 @@ class SplitHoldoutOverrides(TypedDict, total=False):
 
 class SplitOverrides(TypedDict, total=False):
     mode: str
+    allow_same_gene_overlap: bool
     n_splits: int
     stratified: bool
     test_size: float

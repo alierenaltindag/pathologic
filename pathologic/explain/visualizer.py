@@ -16,6 +16,10 @@ class ExplainabilityVisualizer:
         """Renders a standalone error analysis report."""
         patterns = results.get("summary", {}).get("pattern_concentration", {}) or results.get("pattern_concentration", {})
         biological = results.get("summary", {}).get("biological_context", []) or results.get("biological_context", [])
+        panel_performance = (
+            results.get("summary", {}).get("panel_performance", {})
+            or results.get("panel_performance", {})
+        )
         artifacts = results.get("artifacts", {}) if isinstance(results.get("artifacts"), dict) else {}
         plot_file = (
             results.get("summary", {}).get("surrogate_tree", {}).get("plot_file")
@@ -61,6 +65,8 @@ class ExplainabilityVisualizer:
                 <p>Hata yapan varyantların protein aileleri ve domainleri bazlı dağılımı:</p>
                 {self._render_error_analysis(biological)}
             </div>
+
+            {self._render_panel_performance(panel_performance)}
 
             {self._render_error_image_gallery(artifacts, fallback_tree=plot_file)}
         </body>
@@ -817,6 +823,54 @@ class ExplainabilityVisualizer:
             return ""
 
         return "<h2>Hata Analizi Desenleri (Pattern Concentration Analysis)</h2>" + "".join(sections)
+
+    @staticmethod
+    def _render_panel_performance(panel_performance: dict[str, Any] | None) -> str:
+        if not isinstance(panel_performance, dict):
+            return ""
+        if panel_performance.get("status") != "ok":
+            return ""
+
+        rows = panel_performance.get("rows")
+        if not isinstance(rows, list) or not rows:
+            return ""
+
+        table_rows: list[str] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            panel = escape(str(row.get("panel", "unknown")))
+            total_samples = int(row.get("total_samples", 0))
+            correct_predictions = int(row.get("correct_predictions", 0))
+            incorrect_predictions = int(row.get("incorrect_predictions", 0))
+            fp_count = int(row.get("fp_count", 0))
+            fn_count = int(row.get("fn_count", 0))
+            accuracy = float(row.get("accuracy", 0.0))
+            table_rows.append(
+                "<tr>"
+                f"<td>{panel}</td>"
+                f"<td>{total_samples}</td>"
+                f"<td>{correct_predictions}</td>"
+                f"<td>{incorrect_predictions}</td>"
+                f"<td>{fp_count}</td>"
+                f"<td>{fn_count}</td>"
+                f"<td>{accuracy:.3f}</td>"
+                "</tr>"
+            )
+
+        if not table_rows:
+            return ""
+
+        return (
+            "<div class='card'>"
+            "<h2>Panel Bazli Performans (Veri_Kaynagi_Paneli)</h2>"
+            "<p>Her panel icin toplam ornek, dogru tahmin, hatali tahmin, FP ve FN sayisi.</p>"
+            "<table><thead><tr>"
+            "<th>Panel</th><th>Toplam Ornek</th><th>Dogru Tahmin</th><th>Hatali Tahmin</th><th>FP</th><th>FN</th><th>Dogruluk</th>"
+            "</tr></thead><tbody>"
+            + "".join(table_rows)
+            + "</tbody></table></div>"
+        )
 
     @staticmethod
     def _render_error_image_gallery(artifacts: dict[str, Any], *, fallback_tree: str) -> str:

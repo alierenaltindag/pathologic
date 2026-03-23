@@ -254,6 +254,7 @@ class PathoLogic:
             )
 
         split_mode = str(split_config.get("mode", "cross_validation")).strip().lower()
+        allow_same_gene_overlap = bool(split_config.get("allow_same_gene_overlap", True))
         if split_mode in {"cv", "cross_validation"}:
             cv_defaults = split_config.get("cross_validation")
             cv_config = cv_defaults if isinstance(cv_defaults, dict) else {}
@@ -269,6 +270,7 @@ class PathoLogic:
                 gene_column=gene_column,
                 n_splits=int(n_splits_value),
                 stratified=bool(stratified_value),
+                allow_same_gene_overlap=allow_same_gene_overlap,
                 random_state=int(self.defaults.get("seed", 42)),
             )
             self.last_split_summary = summarize_folds(
@@ -296,6 +298,7 @@ class PathoLogic:
                 test_size=float(test_size_value),
                 val_size=float(val_size_value),
                 stratified=bool(holdout_stratified),
+                allow_same_gene_overlap=allow_same_gene_overlap,
                 random_state=int(self.defaults.get("seed", 42)),
             )
             self.last_split_summary = [
@@ -632,6 +635,7 @@ class PathoLogic:
             )
 
         split_mode = str(split_config.get("mode", "cross_validation")).strip().lower()
+        allow_same_gene_overlap = bool(split_config.get("allow_same_gene_overlap", True))
         if split_mode in {"cv", "cross_validation"}:
             cv_defaults = split_config.get("cross_validation")
             cv_config = cv_defaults if isinstance(cv_defaults, dict) else {}
@@ -647,6 +651,7 @@ class PathoLogic:
                 gene_column=gene_column,
                 n_splits=int(n_splits_value),
                 stratified=bool(stratified_value),
+                allow_same_gene_overlap=allow_same_gene_overlap,
                 random_state=int(self.defaults.get("seed", 42)),
             )
         elif split_mode == "holdout":
@@ -668,6 +673,7 @@ class PathoLogic:
                 test_size=float(test_size_value),
                 val_size=float(val_size_value),
                 stratified=bool(holdout_stratified),
+                allow_same_gene_overlap=allow_same_gene_overlap,
                 random_state=int(self.defaults.get("seed", 42)),
             )
             train_val = np.concatenate([split_indices["train"], split_indices["val"]])

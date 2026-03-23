@@ -121,6 +121,85 @@ class MultiDimensionalErrorAnalyzer:
             return 0.0
         return float(numerator / denominator)
 
+    @staticmethod
+    def _summarize_panel_performance(
+        *,
+        y_true: np.ndarray,
+        y_pred: np.ndarray,
+        dataset: pd.DataFrame,
+    ) -> tuple[dict[str, Any], pd.DataFrame]:
+        panel_column = "Veri_Kaynagi_Paneli"
+        if panel_column not in dataset.columns:
+            return (
+                {
+                    "status": "skipped",
+                    "reason": "panel_column_missing",
+                    "panel_column": panel_column,
+                    "panel_count": 0,
+                    "total_samples": int(len(dataset)),
+                    "total_correct_predictions": 0,
+                    "rows": [],
+                },
+                pd.DataFrame(),
+            )
+
+        work = pd.DataFrame(
+            {
+                "panel": dataset[panel_column].astype("string").fillna("unknown").astype(str),
+                "y_true": np.asarray(y_true, dtype=int),
+                "y_pred": np.asarray(y_pred, dtype=int),
+            }
+        )
+        work["is_correct"] = (work["y_true"] == work["y_pred"]).astype(int)
+        work["is_fp"] = ((work["y_true"] == 0) & (work["y_pred"] == 1)).astype(int)
+        work["is_fn"] = ((work["y_true"] == 1) & (work["y_pred"] == 0)).astype(int)
+
+        rows: list[dict[str, Any]] = []
+        for panel_value, frame in work.groupby("panel", dropna=False):
+            total_samples = int(len(frame))
+            correct_predictions = int(frame["is_correct"].sum())
+            incorrect_predictions = int(total_samples - correct_predictions)
+            fp_count = int(frame["is_fp"].sum())
+            fn_count = int(frame["is_fn"].sum())
+            rows.append(
+                {
+                    "panel": str(panel_value),
+                    "total_samples": total_samples,
+                    "correct_predictions": correct_predictions,
+                    "incorrect_predictions": incorrect_predictions,
+                    "accuracy": float(
+                        MultiDimensionalErrorAnalyzer._safe_divide(
+                            float(correct_predictions),
+                            float(total_samples),
+                        )
+                    ),
+                    "fp_count": fp_count,
+                    "fn_count": fn_count,
+                }
+            )
+
+        rows.sort(
+            key=lambda item: (
+                int(item.get("total_samples", 0)),
+                str(item.get("panel", "")),
+            ),
+            reverse=True,
+        )
+        panel_df = pd.DataFrame(rows)
+
+        total_correct_predictions = int(work["is_correct"].sum())
+        return (
+            {
+                "status": "ok",
+                "panel_column": panel_column,
+                "panel_count": int(len(rows)),
+                "total_samples": int(len(work)),
+                "total_correct_predictions": total_correct_predictions,
+                "rows": rows,
+            },
+            panel_df,
+        )
+
     def _build_error_frame(
         self,
         *,
@@ -764,6 +843,12 @@ class MultiDimensionalErrorAnalyzer:
             "correlation_count": int(len(gene_corr_df)),
         }
         summary["biological_context"] = self._summarize_biological_context(error_frame)
+        panel_performance, panel_performance_df = self._summarize_panel_performance(
+            y_true=y_true,
+            y_pred=y_pred,
+            dataset=dataset,
+        )
+        summary["panel_performance"] = panel_performance
 
         clustered_frame, clustering_summary = self._cluster_errors(
             error_frame=error_frame,
@@ -796,6 +881,11 @@ class MultiDimensionalErrorAnalyzer:
             gene_corr_path = output_dir / "gene_proxy_correlations.csv"
             gene_corr_df.to_csv(gene_corr_path, index=False)
             artifacts["gene_proxy_correlations_csv"] = str(gene_corr_path)
+
+        if not panel_performance_df.empty:
+            panel_performance_path = output_dir / "panel_performance.csv"
+            panel_performance_df.to_csv(panel_performance_path, index=False)
+            artifacts["panel_performance_csv"] = str(panel_performance_path)
 
         errors_csv_path = output_dir / "error_samples.csv"
         clustered_frame.to_csv(errors_csv_path, index=False)

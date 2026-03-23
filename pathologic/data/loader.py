@@ -82,9 +82,10 @@ def build_folds(
     gene_column: str = "gene_id",
     n_splits: int = 5,
     stratified: bool = True,
+    allow_same_gene_overlap: bool = True,
     random_state: int = 42,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
-    """Build folds with group leakage prevention when gene IDs are available."""
+    """Build folds with optional same-gene overlap between train/validation folds."""
     if n_splits < 2:
         raise ValueError("n_splits must be >= 2")
 
@@ -92,7 +93,7 @@ def build_folds(
     has_gene = gene_column in df.columns
 
     splitter: GroupKFold | StratifiedGroupKFold | StratifiedKFold | KFold
-    if has_gene:
+    if has_gene and not allow_same_gene_overlap:
         groups = df[gene_column]
         if stratified and _can_stratify(y, n_splits):
             splitter = StratifiedGroupKFold(
@@ -105,14 +106,15 @@ def build_folds(
         splitter = GroupKFold(n_splits=n_splits)
         return list(splitter.split(df, y, groups=groups))
 
-    warnings.warn(
-        (
-            f"Gene column '{gene_column}' not found; falling back to non-grouped folds. "
-            "This may allow same-gene leakage across train/validation splits."
-        ),
-        UserWarning,
-        stacklevel=2,
-    )
+    if not has_gene:
+        warnings.warn(
+            (
+                f"Gene column '{gene_column}' not found; falling back to non-grouped folds. "
+                "This may allow same-gene leakage across train/validation splits."
+            ),
+            UserWarning,
+            stacklevel=2,
+        )
 
     if stratified and _can_stratify(y, n_splits):
         splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
@@ -164,9 +166,10 @@ def build_holdout_split(
     test_size: float = 0.2,
     val_size: float = 0.2,
     stratified: bool = True,
+    allow_same_gene_overlap: bool = True,
     random_state: int = 42,
 ) -> dict[str, np.ndarray]:
-    """Build train/validation/test split with group leakage prevention when possible."""
+    """Build train/validation/test split with optional same-gene overlap."""
     if test_size <= 0.0 or test_size >= 1.0:
         raise ValueError("test_size must satisfy 0 < test_size < 1")
     if val_size <= 0.0 or val_size >= 1.0:
@@ -178,7 +181,7 @@ def build_holdout_split(
     indices = np.arange(len(df))
     has_gene = gene_column in df.columns
 
-    if has_gene:
+    if has_gene and not allow_same_gene_overlap:
         groups = df[gene_column]
         first_split = GroupShuffleSplit(
             n_splits=1,
@@ -203,14 +206,15 @@ def build_holdout_split(
         val_idx = train_val_idx[val_pos]
         return {"train": train_idx, "val": val_idx, "test": test_idx}
 
-    warnings.warn(
-        (
-            f"Gene column '{gene_column}' not found; falling back to non-grouped holdout split. "
-            "This may allow same-gene leakage across train/validation/test splits."
-        ),
-        UserWarning,
-        stacklevel=2,
-    )
+    if not has_gene:
+        warnings.warn(
+            (
+                f"Gene column '{gene_column}' not found; falling back to non-grouped holdout split. "
+                "This may allow same-gene leakage across train/validation/test splits."
+            ),
+            UserWarning,
+            stacklevel=2,
+        )
 
     if stratified and _can_stratify(y, n_splits=2):
         train_val_idx, test_idx = train_test_split(
